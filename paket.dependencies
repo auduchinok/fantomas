@@ -1,7 +1,7 @@
 source https://www.nuget.org/api/v2/
 
-nuget FSharp.Core
-nuget FSharp.Compiler.Service
+nuget FSharp.Core 4.5.2
+nuget JetBrains.FSharp.Compiler.Service 25.0.2
 nuget FsUnit 3.0.0
 nuget FsCheck
 nuget Microsoft.NET.Test.Sdk

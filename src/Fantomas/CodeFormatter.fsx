@@ -1,4 +1,4 @@
-﻿#r "../../packages/FSharp.Compiler.Service/lib/net45/FSharp.Compiler.Service.dll"
+﻿#r "../../packages/JetBrains.FSharp.Compiler.Service/lib/net45/FSharp.Compiler.Service.dll"
 
 #load "Utils.fs"
 #load "FormatConfig.fs"
