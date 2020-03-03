@@ -3,7 +3,7 @@ framework: netstandard2.0, netcoreapp3.1
 storage: none
 
 nuget FSharp.Core 4.7.0
-nuget JetBrains.FSharp.Compiler.Service 2020.1.1
+nuget JetBrains.FSharp.Compiler.Service ~> 2020.1.1
 nuget FsUnit
 nuget FsCheck
 nuget Microsoft.NET.Test.Sdk 16.4.0
