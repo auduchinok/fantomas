@@ -27,7 +27,6 @@ type C () =
     |> prepend newline
     |> should equal """
 type C() =
-
     let rec g x = h x
     and h x = g x
 
@@ -65,21 +64,48 @@ let ``should keep mutually recursive functions in nested function``() =
 let ``should keep identifiers with whitespace in double backticks``() =
     formatSourceString false """let ``should keep identifiers in double backticks``() = x
     """ config
-    |> should equal """let ``should keep identifiers in double backticks``() = x
+    |> should equal """let ``should keep identifiers in double backticks`` () = x
 """
 
 [<Test>]
 let ``should remove backticks from shouldn't identifier``() =
-    formatSourceString false """let ``shouldn't``() = x
+    formatSourceString false """let ``shouldn't`` () = x
     """ config
-    |> should equal """let shouldn't() = x
+    |> should equal """let shouldn't () = x
 """
 
 [<Test>]
 let ``should keep identifiers with + in double backticks``() =
     formatSourceString false """let ``Foo+Bar``() = x
     """ config
-    |> should equal """let ``Foo+Bar``() = x
+    |> should equal """let ``Foo+Bar`` () = x
+"""
+
+[<Test>]
+let ``double backticks with non-alphanum character, 776``() =
+    formatSourceString false """let ``!foo hoo`` () = ()
+let ``@foo hoo`` () = ()
+let ``$foo hoo`` () = ()
+let ``%foo hoo`` () = ()
+let ``^foo hoo`` () = ()
+let ``&foo hoo`` () = ()
+let ``*foo hoo`` () = ()
+let ``<foo hoo`` () = ()
+let ``>foo hoo`` () = ()
+let ``=foo hoo`` () = ()
+let ``-foo hoo`` () = ()
+    """ config
+    |> should equal """let ``!foo hoo`` () = ()
+let ``@foo hoo`` () = ()
+let ``$foo hoo`` () = ()
+let ``%foo hoo`` () = ()
+let ``^foo hoo`` () = ()
+let ``&foo hoo`` () = ()
+let ``*foo hoo`` () = ()
+let ``<foo hoo`` () = ()
+let ``>foo hoo`` () = ()
+let ``=foo hoo`` () = ()
+let ``-foo hoo`` () = ()
 """
 
 [<Test>]
@@ -185,7 +211,6 @@ let ``should not add spaces into a series of function application``() =
     formatSourceString false """let f x = "d"
 f(1).Contains("3")""" config
     |> should equal """let f x = "d"
-
 f(1).Contains("3")
 """
 
@@ -281,7 +306,7 @@ type U = X of int
 let f =
     fun x ->
         match x with
-        | X(x) -> x
+        | X (x) -> x
 """
 
 [<Test>]
@@ -305,17 +330,16 @@ f(42).Length
     |> prepend newline
     |> should equal """
 let f x = "foo"
-
 f(42).Length
 """
 
 [<Test>]
 let ``do add spaces for function application inside parentheses inside dot access``() =
-    formatSourceString false """let inputBlah = "So, I was like, Visual Studio did wat!?"
+    formatSourceString false """let inputBlah = "So, I was like, Visual Studio did wat"
 let someBlahing = (Blah.TryCreate inputBlah).Value"""  config
     |> prepend newline
     |> should equal """
-let inputBlah = "So, I was like, Visual Studio did wat!?"
+let inputBlah = "So, I was like, Visual Studio did wat"
 let someBlahing = (Blah.TryCreate inputBlah).Value
 """
 
@@ -332,7 +356,7 @@ let ``lambda with complex type``() =
     formatSourceString false """let x = fun ((u, v):(int*int)) -> 5"""  config
     |> prepend newline
     |> should equal """
-let x = fun ((u, v): int * int) -> 5
+let x = fun ((u, v): (int * int)) -> 5
 """
 
 [<Test>]
@@ -354,14 +378,15 @@ let fold (funcs : ResultFunc<'Input, 'Output, 'TError> seq) (input : 'Input) : R
     match anyErrors with
     | true -> Error collectedErrors
     | false -> Ok collectedOutputs
-"""  ({ config with PageWidth = 100; SpaceBeforeColon = true })
+"""  ({ config with
+            MaxLineLength = 100
+            SpaceBeforeColon = true
+            MaxInfixOperatorExpression = 70 })
     |> prepend newline
     |> should equal """
-let fold
-    (funcs : ResultFunc<'Input, 'Output, 'TError> seq)
-    (input : 'Input)
-    : Result<'Output list, 'TError list>
-    =
+let fold (funcs : ResultFunc<'Input, 'Output, 'TError> seq)
+         (input : 'Input)
+         : Result<'Output list, 'TError list> =
     let mutable anyErrors = false
     let mutable collectedOutputs = []
     let mutable collectedErrors = []
@@ -373,6 +398,7 @@ let fold
             anyErrors <- true
             collectedErrors <- error :: collectedErrors
         | Ok output -> collectedOutputs <- output :: collectedOutputs
+
     funcs |> Seq.iter (fun validator -> runValidator validator input)
     match anyErrors with
     | true -> Error collectedErrors
@@ -399,15 +425,237 @@ let ``internal keyword included in function signature length check`` () =
 
   let UpdateStrongNamingX (assembly : AssemblyDefinition) (key : StrongNameKeyPair option) =
     assembly.Name
-"""  ({ config with PageWidth = 90; SpaceBeforeColon = true })
+"""  ({ config with MaxLineLength = 90; SpaceBeforeColon = true })
     |> prepend newline
     |> should equal """
-let internal UpdateStrongNaming
-    (assembly : AssemblyDefinition)
-    (key : StrongNameKeyPair option)
-    =
+let internal UpdateStrongNaming (assembly : AssemblyDefinition)
+                                (key : StrongNameKeyPair option)
+                                =
     assembly.Name
 
 let UpdateStrongNamingX (assembly : AssemblyDefinition) (key : StrongNameKeyPair option) =
     assembly.Name
+"""
+
+[<Test>]
+let ``long function definition should put equals and body on a newline, 740`` () =
+    formatSourceString false """
+module FormatCode =
+
+    let private format filename code config =
+        let checker = Fantomas.FakeHelpers.sharedChecker.Force()
+        let options = Fantomas.FakeHelpers.createParsingOptionsFromFile filename
+        let source = SourceOrigin.SourceString code
+        CodeFormatter.FormatDocumentAsync("tmp.fsx", source, config, options, checker)
+
+    [<FunctionName("FormatCode")>]
+    let run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "{*any}")>] req: HttpRequest) (log: ILogger) = Http.main CodeFormatter.GetVersion format FormatConfig.FormatConfig.Default log req
+"""  config
+    |> prepend newline
+    |> should equal """
+module FormatCode =
+
+    let private format filename code config =
+        let checker =
+            Fantomas.FakeHelpers.sharedChecker.Force()
+
+        let options =
+            Fantomas.FakeHelpers.createParsingOptionsFromFile filename
+
+        let source = SourceOrigin.SourceString code
+        CodeFormatter.FormatDocumentAsync("tmp.fsx", source, config, options, checker)
+
+    [<FunctionName("FormatCode")>]
+    let run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "{*any}")>] req: HttpRequest)
+            (log: ILogger)
+            =
+        Http.main CodeFormatter.GetVersion format FormatConfig.FormatConfig.Default log req
+"""
+
+[<Test>]
+let ``long function definition with return type should have multiline signature`` () =
+    formatSourceString false """
+module FormatCode =
+
+    let private format filename code config =
+        let checker = Fantomas.FakeHelpers.sharedChecker.Force()
+        let options = Fantomas.FakeHelpers.createParsingOptionsFromFile filename
+        let source = SourceOrigin.SourceString code
+        CodeFormatter.FormatDocumentAsync("tmp.fsx", source, config, options, checker)
+
+    [<FunctionName("FormatCode")>]
+    let run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "{*any}")>] req: HttpRequest) (log: ILogger) : HttpResponse = Http.main CodeFormatter.GetVersion format FormatConfig.FormatConfig.Default log req
+"""  config
+    |> prepend newline
+    |> should equal """
+module FormatCode =
+
+    let private format filename code config =
+        let checker =
+            Fantomas.FakeHelpers.sharedChecker.Force()
+
+        let options =
+            Fantomas.FakeHelpers.createParsingOptionsFromFile filename
+
+        let source = SourceOrigin.SourceString code
+        CodeFormatter.FormatDocumentAsync("tmp.fsx", source, config, options, checker)
+
+    [<FunctionName("FormatCode")>]
+    let run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "{*any}")>] req: HttpRequest)
+            (log: ILogger)
+            : HttpResponse =
+        Http.main CodeFormatter.GetVersion format FormatConfig.FormatConfig.Default log req
+"""
+
+[<Test>]
+let ``long function signature, 492`` () =
+    formatSourceString false """
+let private addTaskToScheduler (scheduler : IScheduler) taskName taskCron prio (task : unit -> unit) groupName =
+        let mutable jobDataMap = JobDataMap()
+        jobDataMap.["task"] <- task
+        let job =
+            JobBuilder.Create<WrapperJob>().UsingJobData(jobDataMap)
+                .WithIdentity(taskName, groupName).Build()
+        1
+"""  ({ config with MaxLineLength = 100 })
+    |> prepend newline
+    |> should equal """
+let private addTaskToScheduler (scheduler: IScheduler)
+                               taskName
+                               taskCron
+                               prio
+                               (task: unit -> unit)
+                               groupName
+                               =
+    let mutable jobDataMap = JobDataMap()
+    jobDataMap.["task"] <- task
+
+    let job =
+        JobBuilder.Create<WrapperJob>().UsingJobData(jobDataMap).WithIdentity(taskName, groupName)
+            .Build()
+
+    1
+"""
+
+[<Test>]
+let ``long function signature should align with equal sign, 883`` () =
+    formatSourceString false """let readModel (updateState : 'State -> EventEnvelope<'Event> list -> 'State) (initState : 'State) : ReadModel<'Event, 'State> =
+    ()
+"""  { config with IndentSize = 2; SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+let readModel (updateState : 'State -> EventEnvelope<'Event> list -> 'State)
+              (initState : 'State)
+              : ReadModel<'Event, 'State> =
+  ()
+"""
+
+[<Test>]
+let ``long function signature should align with equal sign, no return type`` () =
+    formatSourceString false """let readModel (updateState : 'State -> EventEnvelope<'Event> list -> 'State) (initState : 'State) =
+    ()
+"""  { config with IndentSize = 2; SpaceBeforeColon = true; MaxLineLength = 80 }
+    |> prepend newline
+    |> should equal """
+let readModel (updateState : 'State -> EventEnvelope<'Event> list -> 'State)
+              (initState : 'State)
+              =
+  ()
+"""
+
+[<Test>]
+let ``long function signature with single tuple parameter and no return type`` () =
+    formatSourceString false """
+let fold (funcs: ResultFunc<'Input, 'Output, 'TError> seq, input: 'Input, input2: 'Input, input3: 'Input) =
+    ()
+"""  { config with MaxLineLength = 90 }
+    |> prepend newline
+    |> should equal """
+let fold (funcs: ResultFunc<'Input, 'Output, 'TError> seq,
+          input: 'Input,
+          input2: 'Input,
+          input3: 'Input) =
+    ()
+"""
+
+[<Test>]
+let ``long function signature with single tuple parameter and return type`` () =
+    formatSourceString false """
+let fold (funcs: ResultFunc<'Input, 'Output, 'TError> seq, input: 'Input, input2: 'Input, input3: 'Input) : Result<'Output list, 'TError list> =
+    ()
+"""  { config with MaxLineLength = 90 }
+    |> prepend newline
+    |> should equal """
+let fold (funcs: ResultFunc<'Input, 'Output, 'TError> seq,
+          input: 'Input,
+          input2: 'Input,
+          input3: 'Input)
+         : Result<'Output list, 'TError list> =
+    ()
+"""
+
+[<Test>]
+let ``align long function signature to indentation without return type `` () =
+    formatSourceString false """
+let fold (funcs: ResultFunc<'Input, 'Output, 'TError> seq) (input: 'Input) (input2: 'Input) (input3: 'Input) = ()
+"""  { config with MaxLineLength = 60; AlignFunctionSignatureToIndentation  = true }
+    |> prepend newline
+    |> should equal """
+let fold
+    (funcs: ResultFunc<'Input, 'Output, 'TError> seq)
+    (input: 'Input)
+    (input2: 'Input)
+    (input3: 'Input)
+    =
+    ()
+"""
+
+[<Test>]
+let ``align long function signature to indentation with return type`` () =
+    formatSourceString false """let readModel (updateState : 'State -> EventEnvelope<'Event> list -> 'State) (initState : 'State) : ReadModel<'Event, 'State> =
+    ()
+"""  { config with IndentSize = 2; SpaceBeforeColon = true; AlignFunctionSignatureToIndentation = true }
+    |> prepend newline
+    |> should equal """
+let readModel
+  (updateState : 'State -> EventEnvelope<'Event> list -> 'State)
+  (initState : 'State)
+  : ReadModel<'Event, 'State>
+  =
+  ()
+"""
+
+[<Test>]
+let ``align long function signature to indentation that are recursive`` () =
+    formatSourceString false """
+let rec run ([<HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "{*any}")>] req: HttpRequest) (log: ILogger) : HttpResponse =
+        logAnalyticsForRequest log req
+        Http.main CodeFormatter.GetVersion format FormatConfig.FormatConfig.Default log req
+
+and logAnalyticsForRequest (log:ILogger) (httpRequest: HttpRequest) =
+    log.Info (sprintf "Meh: %A" httpRequest)
+"""  { config with MaxLineLength = 60; AlignFunctionSignatureToIndentation = true }
+    |> prepend newline
+    |> should equal """
+let rec run
+    ([<HttpTrigger(AuthorizationLevel.Anonymous,
+                   "get",
+                   "post",
+                   Route = "{*any}")>] req: HttpRequest)
+    (log: ILogger)
+    : HttpResponse
+    =
+    logAnalyticsForRequest log req
+    Http.main
+        CodeFormatter.GetVersion
+        format
+        FormatConfig.FormatConfig.Default
+        log
+        req
+
+and logAnalyticsForRequest
+    (log: ILogger)
+    (httpRequest: HttpRequest)
+    =
+    log.Info(sprintf "Meh: %A" httpRequest)
 """

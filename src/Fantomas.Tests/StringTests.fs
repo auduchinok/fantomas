@@ -6,7 +6,7 @@ open Fantomas.Tests.TestHelper
 
 [<Test>]
 let ``triple-quoted strings``() =
-    formatSourceString false "let xmlFragment2 = \"\"\"<book author=\"Milton, John\" title=\"Paradise Lost\">\"\"\"" config
+    formatSourceString false "let xmlFragment2 = \"\"\"<book author=\"Milton, John\" title=\"Paradise Lost\">\"\"\"" ({ config with MaxValueBindingWidth = 60 })
     |> should equal "let xmlFragment2 = \"\"\"<book author=\"Milton, John\" title=\"Paradise Lost\">\"\"\"
 "
 
@@ -15,7 +15,7 @@ let ``string literals``() =
     formatSourceString false """
 let xmlFragment1 = @"<book author=""Milton, John"" title=""Paradise Lost"">"
 let str1 = "abc"
-    """ config 
+    """ ({ config with MaxValueBindingWidth = 60 })
     |> prepend newline
     |> should equal """
 let xmlFragment1 = @"<book author=""Milton, John"" title=""Paradise Lost"">"
@@ -110,8 +110,7 @@ let ``should preserve triple-quote strings``() =
         let switchvox_users_voicemail_getList = \"\"\"
             </request>\"\"\"
 
-        member self.X = switchvox_users_voicemail_getList_response
-"    config 
+        member self.X = switchvox_users_voicemail_getList_response" { config with MaxValueBindingWidth = 120 } 
     |> prepend newline
     |> should equal "
 type GetList() =
@@ -123,6 +122,12 @@ type GetList() =
 
     member self.X = switchvox_users_voicemail_getList_response
 "
+
+// either this test needs to be changed or
+// ``should not add newline before = operator after |>`` should change
+// Main problem here it that `ShortExpression` trigger being multiline on
+// WriteLineInsideStringConst cmd
+// To me this feels valid though, of course it lead to the follow result of the test.
 
 [<Test>]
 let ``should keep triple-quote strings``() =
@@ -143,7 +148,11 @@ let main argv =
     |> should equal "
 [<EntryPoint>]
 let main argv =
-    use fun1 = R.eval (R.parse (text = \"\"\"
+    use fun1 =
+        R.eval
+            (R.parse
+                (text =
+                    \"\"\"
     function(i) {
         x <- rnorm(1000)
         y <- rnorm(1000)
@@ -151,6 +160,7 @@ let main argv =
         m$coefficients[[2]]
     }
     \"\"\"))
+
     0
 "
 

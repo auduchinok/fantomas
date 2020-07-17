@@ -15,11 +15,10 @@ let ``exception declarations with members``() =
     formatSourceString false """/// An exception type to signal build errors.
 exception BuildException of string*list<string>
   with
-    override x.ToString() = x.Data0.ToString() + "\r\n" + (separated "\r\n" x.Data1)""" config
+    override x.ToString() = x.Data0.ToString() + "\r\n" + (separated "\r\n" x.Data1)""" ({ config with MaxInfixOperatorExpression = 60; MaxFunctionBindingWidth = 120 })
     |> should equal """/// An exception type to signal build errors.
 exception BuildException of string * list<string> with
-    override x.ToString() =
-        x.Data0.ToString() + "\r\n" + (separated "\r\n" x.Data1)
+    override x.ToString() = x.Data0.ToString() + "\r\n" + (separated "\r\n" x.Data1)
 """
 
 [<Test>]
@@ -32,11 +31,11 @@ let ``type annotations``() =
     |> prepend newline
     |> should equal """
 let iterate1 (f: unit -> seq<int>) =
-    for e in f() do
+    for e in f () do
         printfn "%d" e
 
 let iterate2 (f: unit -> #seq<int>) =
-    for e in f() do
+    for e in f () do
         printfn "%d" e
 """
 
@@ -89,7 +88,7 @@ type Test() =
 
     abstract AbstractMethod<'a, 'b> : 'a * 'b -> unit
     override this.AbstractMethod<'a, 'b>(x:'a, y:'b) =
-         printfn "%A, %A" x y""" config
+         printfn "%A, %A" x y""" { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type Test() =
@@ -129,7 +128,7 @@ type public MyClass<'a> public (x, y) as this =
     member internal self.Prop1 = x 
     member self.Prop2 with get() = z 
                       and set(a) = z <- a 
-    member self.Method(a,b) = x + y + z + a + b""" config
+    member self.Method(a,b) = x + y + z + a + b""" { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type public MyClass<'a> public (x, y) as this =
@@ -168,9 +167,7 @@ type Point2D =
     struct
         val X: float
         val Y: float
-        new(x: float, y: float) =
-            { X = x
-              Y = y }
+        new(x: float, y: float) = { X = x; Y = y }
     end
 """
 
@@ -190,6 +187,7 @@ let ``abstract and override keywords``() =
 type MyClassBase1() =
     let mutable z = 0
     abstract Function1: int -> int
+
     default u.Function1(a: int) =
         z <- z + a
         z
@@ -222,7 +220,7 @@ let ``optional type extensions``() =
 /// Define a new member method FromString on the type Int32. 
 type System.Int32 with 
     member this.FromString( s : string ) =
-       System.Int32.Parse(s)""" config
+       System.Int32.Parse(s)""" { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 /// Define a new member method FromString on the type Int32.
@@ -275,6 +273,7 @@ type Foo() =
     |> should equal """
 type Foo() =
     member x.Get = 1
+
     member x.Set
         with private set (v: int) = value <- v
 
@@ -284,6 +283,7 @@ type Foo() =
 
     member x.GetI
         with internal get (key1, key2) = false
+
     member x.SetI
         with private set (key1, key2) value = ()
 
@@ -308,10 +308,13 @@ type MyType() =
     |> should equal """
 type MyType() =
     let mutable myInt1 = 10
+
     [<DefaultValue; Test>]
     val mutable myInt2: int
+
     [<DefaultValue; Test>]
     val mutable myString: string
+
     member this.SetValsAndPrint(i: int, str: string) =
         myInt1 <- i
         this.myInt2 <- i + 1
@@ -327,13 +330,13 @@ type SpeedingTicket() =
 
 let CalculateFine (ticket : SpeedingTicket) =
     let delta = ticket.GetMPHOver(limit = 55, speed = 70)
-    if delta < 20 then 50.0 else 100.0""" config
+    if delta < 20 then 50.0 else 100.0""" ({ config with MaxValueBindingWidth = 120 })
     |> prepend newline
     |> should equal """
 type SpeedingTicket() =
     member this.GetMPHOver(speed: int, limit: int) = speed - limit
 
-let CalculateFine(ticket: SpeedingTicket) =
+let CalculateFine (ticket: SpeedingTicket) =
     let delta = ticket.GetMPHOver(limit = 55, speed = 70)
     if delta < 20 then 50.0 else 100.0
 """
@@ -523,13 +526,9 @@ type U = U of (int * int)
     |> prepend newline
     |> should equal """
 type Delegate1 = delegate of (int * int) * (int * int) -> int
-
 type Delegate2 = delegate of int * int -> int
-
 type Delegate3 = delegate of int -> (int -> int)
-
 type Delegate4 = delegate of int -> int -> int
-
 type U = U of (int * int)
 """
 
@@ -540,7 +539,7 @@ let ``should keep the ? in optional parameters``() =
     static member Exec(cmd, ?args) = 
         shellExec(Shell.GetParams(cmd, ?args = args))
 
-    """ config
+    """ { config with MaxFunctionBindingWidth = 120 }
     |> should equal """type Shell() =
     static member private GetParams(cmd, ?args) = doStuff
     static member Exec(cmd, ?args) = shellExec (Shell.GetParams(cmd, ?args = args))
@@ -569,7 +568,7 @@ let ``should keep brackets around type signatures``() =
     formatSourceString false """
 let user_printers = ref([] : (string * (term -> unit)) list)
 let the_interface = ref([] : (string * (string * hol_type)) list)
-    """ config
+    """ ({ config with MaxValueBindingWidth = 50 })
     |> prepend newline
     |> should equal """
 let user_printers = ref ([]: (string * (term -> unit)) list)
@@ -614,7 +613,9 @@ type BlobHelper(Account: CloudStorageAccount) =
                 if hostedService
                 then RoleEnvironment.GetConfigurationSettingValue(configName)
                 else ConfigurationManager.ConnectionStrings.[configName].ConnectionString
-            configSettingPublisher.Invoke(connectionString) |> ignore)
+
+            configSettingPublisher.Invoke(connectionString)
+            |> ignore)
         BlobHelper(CloudStorageAccount.FromConfigurationSetting(configurationSettingName))
 """
 
@@ -648,6 +649,7 @@ type CustomGraphControl() =
     |> should equal """
 type CustomGraphControl() =
     inherit UserControl()
+
     [<DefaultValue(false)>]
     static val mutable private GraphProperty: DependencyProperty
 """
@@ -664,6 +666,7 @@ type CustomGraphControl() =
     |> should equal """
 type CustomGraphControl() =
     inherit UserControl()
+
     [<DefaultValue(false)>]
     static val mutable private GraphProperty: DependencyProperty
 """
@@ -680,6 +683,7 @@ type CustomGraphControl() =
     |> should equal """
 type CustomGraphControl() =
     inherit UserControl()
+
     [<DefaultValue false>]
     static val mutable private GraphProperty: DependencyProperty
 """
@@ -696,6 +700,7 @@ type CustomGraphControl() =
     |> should equal """
 type CustomGraphControl() =
     inherit UserControl()
+
     [<DefaultValue false>]
     static val mutable private GraphProperty: DependencyProperty
 """
@@ -717,8 +722,9 @@ type A() =
         with set v =
             let x =
                 match _kbytes.GetAddress(8) with
-                | Some(x) -> x
+                | Some (x) -> x
                 | None -> null
+
             ignore x
 """
 
@@ -750,22 +756,21 @@ type Bar =
     member this.Item
         with get(i : string) = 
             match mo with
-            | Some(m) when m.Groups.[i].Success -> m.Groups.[i].Value
+            | Some (m) when m.Groups.[i].Success -> m.Groups.[i].Value
             | _ -> null""" config
     |> prepend newline
     |> should equal """
 type Bar =
-
     member this.Item
         with get (i: int) =
             match mo with
-            | Some(m) when m.Groups.[i].Success -> m.Groups.[i].Value
+            | Some (m) when m.Groups.[i].Success -> m.Groups.[i].Value
             | _ -> null
 
     member this.Item
         with get (i: string) =
             match mo with
-            | Some(m) when m.Groups.[i].Success -> m.Groups.[i].Value
+            | Some (m) when m.Groups.[i].Success -> m.Groups.[i].Value
             | _ -> null
 """
 
@@ -777,7 +782,7 @@ let x =
         (Label = "Test", 
          IntrinsicSettings = JobCollectionIntrinsicSettings
                                  (Plan = JobCollectionPlan.Standard, 
-                                  Quota = new JobCollectionQuota(MaxJobCount = Nullable(50))))""" { config with PageWidth = 120 }
+                                  Quota = new JobCollectionQuota(MaxJobCount = Nullable(50))))""" { config with MaxLineLength = 120 }
     |> prepend newline
     |> should equal """
 let x =
@@ -851,7 +856,7 @@ let ``type abbreviation augmentation``() =
 [<Test>]
 let ``operator in words should not print to symbol, 409`` () =
     formatSourceString false """type T() =
-    static member op_LessThan(a, b) = a < b""" config
+    static member op_LessThan(a, b) = a < b""" ({ config with SpaceBeforeMember = true; MaxFunctionBindingWidth = 120 })
     |> should equal """type T() =
     static member op_LessThan (a, b) = a < b
 """
@@ -865,7 +870,7 @@ let ``operator in words in let binding`` () =
 [<Test>]
 let ``operator in words in member`` () =
     formatSourceString false """type A() =
-    member this.B(op_Inequality : string) = ()""" config
+    member this.B(op_Inequality : string) = ()""" { config with MaxFunctionBindingWidth = 120 }
     |> should equal """type A() =
     member this.B(op_Inequality: string) = ()
 """
@@ -881,7 +886,7 @@ type TestExtensions =
 
     [<Extension>]
     static member SomeOtherExtension(x) = ""
-"""  config
+"""  { config with MaxValueBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 [<Extension>]
@@ -937,12 +942,9 @@ and Room =
     |> should equal """
 module Game
 
-type Details =
-    { Name: string
-      Description: string }
+type Details = { Name: string; Description: string }
 
-type Item =
-    { Details: Details }
+type Item = { Details: Details }
 
 type Exit =
     | Passable of Details * desitnation: Room
@@ -1000,4 +1002,641 @@ and [<Marker>] Room =
     { Details: Details
       Items: Item list
       Exits: Exits }
+"""
+
+[<Test>]
+let ``trivia newlines between letbinding of type, 709`` () =
+    formatSourceString false """
+open Xunit
+open FSharp.Core
+open Swensen.Unquote
+
+type FormattingSpecs() =
+
+    [<Fact>]
+    let ``true is true``() = test <@ true = true @>
+
+    [<Fact>]
+    let ``false is false``() = test <@ false = false @>
+"""  config
+    |> prepend newline
+    |> should equal """
+open Xunit
+open FSharp.Core
+open Swensen.Unquote
+
+type FormattingSpecs() =
+
+    [<Fact>]
+    let ``true is true`` () = test <@ true = true @>
+
+    [<Fact>]
+    let ``false is false`` () = test <@ false = false @>
+"""
+
+[<Test>]
+let ``line comment above single line abstract slot should not make it multiline, 757`` () =
+    formatSourceString false """[<AllowNullLiteral>]
+type Graph2dOptions =
+    abstract zoomMin: float option with get, set
+    // abstract moment: MomentConstructor option with get, set
+    abstract maxHeight: HeightWidthType option with get, set
+    abstract zIndex: float option with get, set
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type Graph2dOptions =
+    abstract zoomMin: float option with get, set
+    // abstract moment: MomentConstructor option with get, set
+    abstract maxHeight: HeightWidthType option with get, set
+    abstract zIndex: float option with get, set
+"""
+
+[<Test>]
+let ``long type members should have parameters on separate lines, 719`` () =
+    formatSourceString false """type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse, aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =  aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  ({ config with SpaceBeforeClassConstructor = true })
+    |> prepend newline
+    |> should equal """
+type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                             aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                             aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+        aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``long type member with return type should have parameters on separate lines`` () =
+    formatSourceString false """type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse, aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) : int =  aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  ({ config with SpaceBeforeClassConstructor = true })
+    |> prepend newline
+    |> should equal """
+type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                             aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                             aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                             : int =
+        aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``long constructors should have parameters on separate lines`` () =
+    formatSourceString false """type C (aVeryLongType : AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse, aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse) =
+    member this.X = 42
+"""  ({ config with SpaceBeforeClassConstructor = true })
+    |> prepend newline
+    |> should equal """
+type C (aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+        aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+        aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+    member this.X = 42
+"""
+
+[<Test>]
+let ``preserve abstract keyword`` () =
+    formatSourceString false """namespace Foo
+
+type internal Blah =
+  abstract Baz : unit
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Foo
+
+type internal Blah =
+    abstract Baz: unit
+"""
+
+[<Test>]
+let ``keep correct indentation after multiline member definition, 845`` () =
+    formatSourceString false """type SomeType() =
+    member SomeMember(looooooooooooooooooooooooooooooooooong1: A, looooooooooooooooooooooooooooooooooong2: A) =
+        printfn "a"
+        "a"
+
+    member SomeOtherMember () =
+        printfn "b"
+"""  ({ config with MaxLineLength = 80; MaxFunctionBindingWidth = 120 })
+    |> prepend newline
+    |> should equal """
+type SomeType() =
+    member SomeMember(looooooooooooooooooooooooooooooooooong1: A,
+                      looooooooooooooooooooooooooooooooooong2: A) =
+        printfn "a"
+        "a"
+
+    member SomeOtherMember() = printfn "b"
+"""
+
+[<Test>]
+let ``keep correct indentation after multiline typed member definition`` () =
+    formatSourceString false """type SomeType() =
+    member SomeMember(looooooooooooooooooooooooooooooooooong1: A, looooooooooooooooooooooooooooooooooong2: A) : string =
+        printfn "a"
+        "a"
+
+    member SomeOtherMember () =
+        printfn "b"
+"""  ({ config with MaxLineLength = 80; MaxFunctionBindingWidth = 120 })
+    |> prepend newline
+    |> should equal """
+type SomeType() =
+    member SomeMember(looooooooooooooooooooooooooooooooooong1: A,
+                      looooooooooooooooooooooooooooooooooong2: A)
+                      : string =
+        printfn "a"
+        "a"
+
+    member SomeOtherMember() = printfn "b"
+"""
+
+[<Test>]
+let ``split multiple parameters over multiple lines`` () =
+    formatSourceString false """type SomeType =
+    static member SomeMember (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1: string) (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: string) : string =
+    printfn "a"
+    "b"
+"""  config
+    |> prepend newline
+    |> should equal """
+type SomeType =
+    static member SomeMember (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1: string)
+                             (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: string)
+                             : string =
+        printfn "a"
+        "b"
+"""
+
+[<Test>]
+let ``split multiple parameters over multiple lines and have correct indentation afterwards`` () =
+    formatSourceString false """type SomeType =
+    static member SomeMember (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1: string) (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: string) : string =
+    printfn "a"
+    "b"
+
+    static member SomeOtherMember () = printfn "c"
+"""  { config with MaxFunctionBindingWidth = 120 }
+    |> prepend newline
+    |> should equal """
+type SomeType =
+    static member SomeMember (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1: string)
+                             (looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: string)
+                             : string =
+        printfn "a"
+        "b"
+
+    static member SomeOtherMember() = printfn "c"
+"""
+
+[<Test>]
+let ``member with one long parameter and return type, 850`` () =
+    formatSourceString false """type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1 : string =
+    printfn "a"
+    "b"
+"""  config
+    |> prepend newline
+    |> should equal """
+type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1
+                             : string =
+        printfn "a"
+        "b"
+"""
+
+[<Test>]
+let ``member with one long parameter and no return type, 850`` () =
+    formatSourceString false """type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1 =
+    printfn "a"
+    "b"
+"""  config
+    |> prepend newline
+    |> should equal """
+type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1
+                             =
+        printfn "a"
+        "b"
+"""
+
+[<Test>]
+let ``multiple members with one long parameter`` () =
+    formatSourceString false """type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1 =
+    printfn "a"
+    "b"
+
+    static member Serialize (loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: SomeType) = Encode.string v.Meh
+    static member Deserialize (loooooooooooooooooooooooooooooooooooooooooooooooooooooonnnnnnnnnnnnnnnnnnnnngggggggggggJsonVaaaaalueeeeeeeeeeeeeeee) : SomeType = Decode.SomeType loooooooooooooooooooooooooooooooooooooooooooooooooooooonnnnnnnnnnnnnnnnnnnnngggggggggggJsonVaaaaalueeeeeeeeeeeeeeee
+"""  config
+    |> prepend newline
+    |> should equal """
+type SomeType =
+    static member SomeMember loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong1
+                             =
+        printfn "a"
+        "b"
+
+    static member Serialize(loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong2: SomeType)
+                           =
+        Encode.string v.Meh
+
+    static member Deserialize(loooooooooooooooooooooooooooooooooooooooooooooooooooooonnnnnnnnnnnnnnnnnnnnngggggggggggJsonVaaaaalueeeeeeeeeeeeeeee)
+                              : SomeType =
+        Decode.SomeType
+            loooooooooooooooooooooooooooooooooooooooooooooooooooooonnnnnnnnnnnnnnnnnnnnngggggggggggJsonVaaaaalueeeeeeeeeeeeeeee
+"""
+
+[<Test>]
+let ``access modifier before long constructor`` () =
+    formatSourceString false """type INotifications<'a,'b,'c,'d,'e> = 
+    class
+    end
+type DeviceNotificationHandler<'Notification, 'CallbackId, 'RegisterInputData, 'RegisterOutputData, 'UnregisterOutputData> private (client: INotifications<'Notification, 'CallbackId, 'RegisterInputData, 'RegisterOutputData, 'UnregisterOutputData>, callbackId: 'CallbackId, validateUnregisterOutputData: 'UnregisterOutputData -> unit) =
+    let a = 5
+"""  config
+    |> prepend newline
+    |> should equal """
+type INotifications<'a, 'b, 'c, 'd, 'e> =
+    class
+    end
+
+type DeviceNotificationHandler<'Notification, 'CallbackId, 'RegisterInputData, 'RegisterOutputData, 'UnregisterOutputData> private (client: INotifications<'Notification, 'CallbackId, 'RegisterInputData, 'RegisterOutputData, 'UnregisterOutputData>,
+                                                                                                                                    callbackId: 'CallbackId,
+                                                                                                                                    validateUnregisterOutputData: 'UnregisterOutputData -> unit) =
+    let a = 5
+"""
+
+
+[<Test>]
+let ``long type members should be in multiple lines, 868`` () =
+    formatSourceString false """
+type C() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: int, aSecondVeryLongType: int, aThirdVeryLongType: int) : int =
+        aVeryLongType + aSecondVeryLongType + aThirdVeryLongType
+"""  { config with MaxLineLength = 80; SpaceBeforeColon = true; MaxInfixOperatorExpression = 80 }
+    |> prepend newline
+    |> should equal """
+type C() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType : int,
+                                            aSecondVeryLongType : int,
+                                            aThirdVeryLongType : int)
+                                            : int =
+        aVeryLongType + aSecondVeryLongType + aThirdVeryLongType
+"""
+
+[<Test>]
+let ``long type members should be in multiple lines, no return type`` () =
+    formatSourceString false """
+type C() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: int, aSecondVeryLongType: int, aThirdVeryLongType: int) =
+        aVeryLongType + aSecondVeryLongType + aThirdVeryLongType
+"""  { config with MaxLineLength = 80; SpaceBeforeColon = true; MaxInfixOperatorExpression = 80 }
+    |> prepend newline
+    |> should equal """
+type C() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType : int,
+                                            aSecondVeryLongType : int,
+                                            aThirdVeryLongType : int) =
+        aVeryLongType + aSecondVeryLongType + aThirdVeryLongType
+"""
+
+[<Test>]
+let ``long type constructors should be in multiple lines, 868`` () =
+    formatSourceString false """
+type VersionMismatchDuringDeserializationException(message: string, innerException: System.Exception) =
+    inherit System.Exception(message, innerException)
+"""  { config with MaxLineLength = 80; SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+type VersionMismatchDuringDeserializationException(message : string,
+                                                   innerException : System.Exception) =
+    inherit System.Exception(message, innerException)
+"""
+
+[<Test>]
+let ``tuple typed abbreviation`` () =
+    formatSourceString false """type A = (int * int)
+"""  config
+    |> prepend newline
+    |> should equal """
+type A = (int * int)
+"""
+
+[<Test>]
+let ``function signature type abbreviation`` () =
+    formatSourceString false """type A = (int -> int -> int)
+"""  config
+    |> prepend newline
+    |> should equal """
+type A = (int -> int -> int)
+"""
+
+let ``type record declaration with attributes, 910`` () =
+    formatSourceString false """type Commenter =
+    { [<JsonProperty("display_name")>]
+      DisplayName: string }
+
+type Message =
+    { [<JsonProperty("body")>]
+      Body: string }
+"""  config
+    |> prepend newline
+    |> should equal """
+type Commenter =
+    { [<JsonProperty("display_name")>]
+      DisplayName: string }
+
+type Message =
+    { [<JsonProperty("body")>]
+      Body: string }
+"""
+
+[<Test>]
+let ``attribute on abstract member followed by type with attribute, 933`` () =
+    formatSourceString false """
+[<AllowNullLiteral>]
+type SubGroupStackOptions =
+    [<Emit "$0[$1]{{=$2}}">]
+    abstract Item: name:string -> bool with get, set
+
+[<AllowNullLiteral>]
+type DataGroup =
+    abstract className: string option with get, set
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type SubGroupStackOptions =
+    [<Emit "$0[$1]{{=$2}}">]
+    abstract Item: name:string -> bool with get, set
+
+[<AllowNullLiteral>]
+type DataGroup =
+    abstract className: string option with get, set
+"""
+
+[<Test>]
+let ``attribute on abstract member followed by let binding with attribute`` () =
+    formatSourceString false """
+[<AllowNullLiteral>]
+type SubGroupStackOptions =
+    [<Emit "$0[$1]{{=$2}}">]
+    abstract Item: name:string -> bool with get, set
+
+[<AllowNullLiteral>]
+let foo bar = zero
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type SubGroupStackOptions =
+    [<Emit "$0[$1]{{=$2}}">]
+    abstract Item: name:string -> bool with get, set
+
+[<AllowNullLiteral>]
+let foo bar = zero
+"""
+
+[<Test>]
+let ``type constraint on type definition, 887`` () =
+    formatSourceString false """
+type OuterType =
+    abstract Apply<'r>
+        : InnerType<'r>
+        -> 'r when 'r : comparison
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+type OuterType =
+    abstract Apply<'r> : InnerType<'r>
+        -> 'r when 'r : comparison
+"""
+
+[<Test>]
+let ``attribute on type and abstract member followed by type, 949`` () =
+    formatSourceString false """
+[<AllowNullLiteral>]
+type TimelineOptionsGroupCallbackFunction =
+    [<Emit "$0($1...)">]
+    abstract Invoke: group:TimelineGroup * callback:(TimelineGroup option -> unit) -> unit
+
+type TimelineOptionsGroupEditableType = U2<bool, TimelineGroupEditableOption>
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type TimelineOptionsGroupCallbackFunction =
+    [<Emit "$0($1...)">]
+    abstract Invoke: group:TimelineGroup * callback:(TimelineGroup option -> unit) -> unit
+
+type TimelineOptionsGroupEditableType = U2<bool, TimelineGroupEditableOption>
+"""
+
+[<Test>]
+let ``attribute on type and abstract member followed by let binding`` () =
+    formatSourceString false """
+[<AllowNullLiteral>]
+type TimelineOptionsGroupCallbackFunction =
+    [<Emit "$0($1...)">]
+    abstract Invoke: group:TimelineGroup * callback:(TimelineGroup option -> unit) -> unit
+
+let myBinding a = 7
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type TimelineOptionsGroupCallbackFunction =
+    [<Emit "$0($1...)">]
+    abstract Invoke: group:TimelineGroup * callback:(TimelineGroup option -> unit) -> unit
+
+let myBinding a = 7
+"""
+
+[<Test>]
+let ``comments before access modifier, 885`` () =
+    formatSourceString false """
+type TestType =
+    // Here is some comment about the type
+    // Some more comments
+    private
+        {
+            Foo : int
+        }
+"""  config
+    |> prepend newline
+    |> should equal """
+type TestType =
+    // Here is some comment about the type
+    // Some more comments
+    private { Foo: int }
+"""
+
+[<Test>]
+let ``alternative long member definition`` () =
+    formatSourceString false """
+type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType : AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse) =
+        someImplementation aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  { config with
+            SpaceBeforeClassConstructor = true
+            SpaceBeforeColon = true
+            AlternativeLongMemberDefinitions = true }
+    |> prepend newline
+    |> should equal """
+type C () =
+    member __.LongMethodWithLotsOfParameters
+        (
+            aVeryLongType : AVeryLongTypeThatYouNeedToUse,
+            aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,
+            aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse
+        )
+        =
+        someImplementation aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``alternative long member definition with return type`` () =
+    formatSourceString false """
+type C () =
+    member __.LongMethodWithLotsOfParameters(aVeryLongType : AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse) : int =
+        someImplementation aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  { config with
+            SpaceBeforeClassConstructor = true
+            SpaceBeforeColon = true
+            AlternativeLongMemberDefinitions = true }
+    |> prepend newline
+    |> should equal """
+type C () =
+    member __.LongMethodWithLotsOfParameters
+        (
+            aVeryLongType : AVeryLongTypeThatYouNeedToUse,
+            aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,
+            aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse
+        )
+        : int
+        =
+        someImplementation aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+// See https://github.com/dotnet/docs/issues/18806#issuecomment-655281219
+
+[<Test>]
+let ``member, tuple (non-curried), with return type:`` () =
+    formatSourceString false """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse, aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) : AVeryLongReturnType =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  config
+    |> prepend newline
+    |> should equal """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                            aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                            aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            : AVeryLongReturnType =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``member, tuple (non-curried), with no return type:`` () =
+    formatSourceString false """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse, aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse, aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  config
+    |> prepend newline
+    |> should equal """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                            aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+                                            aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``member, curried (non-tuple), with return type:`` () =
+    formatSourceString false """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse) (aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse) (aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) : AVeryLongReturnType =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  config
+    |> prepend newline
+    |> should equal """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters (aVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            (aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            (aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            : AVeryLongReturnType =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``member, curried (non-tuple), with no return type:`` () =
+    formatSourceString false """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters(aVeryLongType: AVeryLongTypeThatYouNeedToUse) (aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse) (aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""  config
+    |> prepend newline
+    |> should equal """
+type MyClass() =
+    member _.LongMethodWithLotsOfParameters (aVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            (aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            (aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse)
+                                            =
+        someFunction aVeryLongType aSecondVeryLongType aThirdVeryLongType
+"""
+
+[<Test>]
+let ``alternative long class constructor`` () =
+    formatSourceString false """
+type C(aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+       aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+       aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+    class
+    end
+"""  { config with
+                AlternativeLongMemberDefinitions = true
+                SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+type C
+    (
+        aVeryLongType : AVeryLongTypeThatYouNeedToUse,
+        aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,
+        aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse
+    )
+    =
+    class
+    end
+"""
+
+[<Test>]
+let ``alternative long class constructor with access modifier`` () =
+    formatSourceString false """
+type C internal (aVeryLongType: AVeryLongTypeThatYouNeedToUse,
+       aSecondVeryLongType: AVeryLongTypeThatYouNeedToUse,
+       aThirdVeryLongType: AVeryLongTypeThatYouNeedToUse) =
+    class
+    end
+"""  { config with
+                AlternativeLongMemberDefinitions = true
+                SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+type C
+    internal
+    (
+        aVeryLongType : AVeryLongTypeThatYouNeedToUse,
+        aSecondVeryLongType : AVeryLongTypeThatYouNeedToUse,
+        aThirdVeryLongType : AVeryLongTypeThatYouNeedToUse
+    )
+    =
+    class
+    end
 """

@@ -13,6 +13,42 @@ if foo then bar
 """
 
 [<Test>]
+let ``if without else, if is longer`` () =
+    formatSourceString false """
+if foooooooooooooooooooooooooooooooooooooooooooo
+then bar
+"""  config
+    |> prepend newline
+    |> should equal """
+if foooooooooooooooooooooooooooooooooooooooooooo
+then bar
+"""
+
+[<Test>]
+let ``if without else, then is longer`` () =
+    formatSourceString false """
+if foo then baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaar
+"""  config
+    |> prepend newline
+    |> should equal """
+if foo
+then baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaar
+"""
+
+[<Test>]
+let ``multiline if without else`` () =
+    formatSourceString false """
+if foo && bar && meh then aha
+"""  ({ config with MaxInfixOperatorExpression = 5 })
+    |> prepend newline
+    |> should equal """
+if foo
+   && bar
+   && meh then
+    aha
+"""
+
+[<Test>]
 let ``single line if/then/else`` () =
     formatSourceString false "if a then b else c" config
     |> prepend newline
@@ -54,7 +90,7 @@ else g
 [<Test>]
 let ``longer condition, not multi-line`` () =
     formatSourceString false """if aaaaaaaaaBBBBBBBBBBccccccccccDDDDDDDDDeeeeeeeeeeeeeFFFFFFFFFFFggggggggg then 1 else 0
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if aaaaaaaaaBBBBBBBBBBccccccccccDDDDDDDDDeeeeeeeeeeeeeFFFFFFFFFFFggggggggg
@@ -65,7 +101,7 @@ else 0
 [<Test>]
 let ``longer ifBranch, not multi-line`` () =
     formatSourceString false """if x then aaaaaaaaaBBBBBBBBBBccccccccccDDDDDDDDDeeeeeeeeeeeeeFFFFFFFFFFFggggggggg else 0
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if x
@@ -76,7 +112,7 @@ else 0
 [<Test>]
 let ``longer else branch, not multi-line`` () =
     formatSourceString false """if x then 1 else aaaaaaaaaBBBBBBBBBBccccccccccDDDDDDDDDeeeeeeeeeeeeeFFFFFFFFFFFggggggggg
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if x
@@ -87,7 +123,7 @@ else aaaaaaaaaBBBBBBBBBBccccccccccDDDDDDDDDeeeeeeeeeeeeeFFFFFFFFFFFggggggggg
 [<Test>]
 let ``longer if else branch, not multi-line`` () =
     formatSourceString false """if aaaaaaaaaaaa then bbbbbbbbbbbb else if cccccccccccc then ddddddddddd else eeeeeee
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if aaaaaaaaaaaa then bbbbbbbbbbbb
@@ -98,7 +134,7 @@ else eeeeeee
 [<Test>]
 let ``longer if else branch, longer elif branch, not multi-line`` () =
     formatSourceString false """if aaaaaa then bbbbbb else if ccccccc then ddddddd elif eeeee then ffffff else gggggg
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if aaaaaa then bbbbbb
@@ -111,7 +147,7 @@ else gggggg
 let ``multiline condition`` () =
     formatSourceString false """if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa && bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb) then
     x else y
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if (aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -127,7 +163,7 @@ let ``multiline if branch`` () =
     let x = 2
     x + 2
 else y
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if a then
@@ -144,7 +180,7 @@ let ``multiline else branch`` () =
 else
     let y = 7;
     y + 9
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if a then
@@ -162,7 +198,7 @@ let ``multiline else if branch`` () =
                 y + 9
     else
         99
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if a then
@@ -185,7 +221,7 @@ let ``multiline else if branch, multiline elif branch`` () =
         z - 7
     else
         99
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if a then
@@ -664,7 +700,7 @@ elif strA.String == strB.String && strA.Offset = strB.Offset then
 
 else
     -1
-"""  config
+"""  ({ config with MaxInfixOperatorExpression = 55 })
     |> prepend newline
     |> should equal """
 if strA.Length = 0 && strB.Length = 0 then
@@ -685,7 +721,7 @@ let ``simple if/else with long identifiers`` () =
 if someveryveryveryverylongexpression then
             someveryveryveryveryveryverylongexpression
 else someveryveryveryverylongexpression
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 if someveryveryveryverylongexpression
@@ -804,4 +840,79 @@ module String =
         if la <> lb then if la > lb then a' else b'
         else if String.length a' < String.length b' then a'
         else b'
+"""
+
+[<Test>]
+let ``second else if where else and if are on separate lines, 713`` () =
+    formatSourceString false """if v1 < v2 then
+    -1
+elif v1 > v2 then
+    1
+else
+    if t1 < t2 then
+        -1
+    elif t1 > t2 then
+        1
+    else
+        0
+"""  config
+    |> prepend newline
+    |> should equal """
+if v1 < v2 then -1
+elif v1 > v2 then 1
+else if t1 < t2 then -1
+elif t1 > t2 then 1
+else 0
+"""
+
+[<Test>]
+let ``newline between else if,  prior by elif`` () =
+    formatSourceString false """
+module String =
+    let merge a b =
+            if la <> lb then
+                if la > lb then a' else b'
+            elif la = lb then a'
+            else
+                if String.length a' < String.length b' then a' else b'
+"""  config
+    |> prepend newline
+    |> should equal """
+module String =
+    let merge a b =
+        if la <> lb then if la > lb then a' else b'
+        elif la = lb then a'
+        else if String.length a' < String.length b' then a'
+        else b'
+"""
+
+[<Test>]
+let ``newline between else if, followed by else if`` () =
+    formatSourceString false """
+module String =
+    let merge a b =
+            if la <> lb then
+                if la > lb then a' else b'
+            else
+                if String.length a' < String.length b' then a' else if String.length a' > String.length b' then b' else b'
+"""  config
+    |> prepend newline
+    |> should equal """
+module String =
+    let merge a b =
+        if la <> lb then if la > lb then a' else b'
+        else if String.length a' < String.length b' then a'
+        else if String.length a' > String.length b' then b'
+        else b'
+"""
+
+[<Test>]
+let ``comment after then in if/then, 730`` () =
+    formatSourceString false """if true then // comment
+    ()
+"""  config
+    |> prepend newline
+    |> should equal """
+if true then // comment
+    ()
 """

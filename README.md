@@ -5,7 +5,7 @@ Fantomas
 
 F# source code formatter, inspired by [scalariform](https://github.com/mdr/scalariform) for Scala, [ocp-indent](https://github.com/OCamlPro/ocp-indent) for OCaml and [PythonTidy](https://github.com/acdha/PythonTidy) for Python.
 
-[![Build Status Github Actions](https://github.com/fsprojects/fantomas/workflows/Build%20master/badge.svg)](https://github.com/fsprojects/fantomas/actions)
+[![Build Status Github Actions](https://github.com/fsprojects/fantomas/workflows/Build%20master/badge.svg?branch=master&event=push)](https://github.com/fsprojects/fantomas/actions)
 [![Build Status AppVeyor](https://ci.appveyor.com/api/projects/status/github/nojaf/fantomas)](https://ci.appveyor.com/project/nojaf/fantomas) [![Join the chat at https://gitter.im/fsprojects/fantomas](https://badges.gitter.im/fsprojects/fantomas.svg)](https://gitter.im/fsprojects/fantomas?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 ## How to use
@@ -33,7 +33,7 @@ open Fake.IO.Globbing.Operators
 open Fantomas.FakeHelpers
 open Fantomas.FormatConfig
 
-let fantomasConfig = { FormatConfig.Default with ReorderOpenDeclaration = true }
+let fantomasConfig = { FormatConfig.Default with PageWidth = 140 }
 
 Target.create "CheckCodeFormat" (fun _ ->
     !!"*.fs"
@@ -61,9 +61,13 @@ The recommended way to use Fantomas is by using the [Ionide plugin](http://ionid
 
 Alternatively, you can install the [fantomas-fmt](https://marketplace.visualstudio.com/items?itemName=paolodellepiane.fantomas-fmt) extension.
 
+### Visual Studio
+
+The [F# Formatting](https://marketplace.visualstudio.com/items?itemName=asti.fantomas-vs) extension sets up Fantomas as the default formatter for F# files, configurable from Visual Studio's options.
+
 ### Online
 
-Try the Fantomas [online](https://jindraivanek.gitlab.io/fantomas-ui/#?fantomas=preview).
+Try the Fantomas [online](https://fsprojects.github.io/fantomas-tools/#/fantomas/preview).
 
 ## Early builds
 
@@ -78,6 +82,11 @@ Install from MyGet:
 
 Note that the `--version` is important, check the latest version [at MyGet](https://www.myget.org/feed/fantomas/package/nuget/fantomas-tool).
 Your can check your current version with `fantomas --version` (since December 2018).
+
+## Benchmarks
+
+Some figures can be found at https://fsprojects.github.io/fantomas/ <br/>
+We use [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet) to collect data for each build on the master branch.
 
 ## Purpose
 This project aims at formatting F# source files based on a given configuration.
@@ -180,7 +189,7 @@ Thank you for your interest in contributing to Fantomas! This guide explains eve
 
 ### Before touching the code
 - Open an issue to propose the change you have in mind. 
-- For bugs, please create them using the [online tool](https://jindraivanek.gitlab.io/fantomas-ui/). Update the title of the issue with something meaningful instead of `Bug report from fantomas-ui`.
+- For bugs, please create them using the [online tool](https://fsprojects.github.io/fantomas-tools/). Update the title of the issue with something meaningful instead of `Bug report from fantomas-ui`.
 - For stylistic changes, please take the time to discuss them and consider all possible outcomes of the change. Consult the [fsharp style guide](https://docs.microsoft.com/en-us/dotnet/fsharp/style-guide/) for guidance.
 New behavior should most likely be optional because a configuration flag. 
 Always keep the following train of thought: if a user upgrades Fantomas to a new version, the result of formatting with the default settings should not change.
@@ -217,13 +226,10 @@ let ``preserve compile directive between piped functions, 512`` () = ...
 When upgrading the [FSharp.Compiler.Service](https://www.nuget.org/packages/FSharp.Compiler.Service/) please consider the following order:
 
 - Make sure [the latest documentation](https://fsharp.github.io/FSharp.Compiler.Service/reference/fsharp-compiler-ast.html) is available.
-- Update Fantomas (this repository, part 1): Update the dependency, correct any compilation errors and update [AstTransformer](.\src\Fantomas\AstTransformer.fs) if needed.
-- Update [AST Viewer](https://gitlab.com/jindraivanek/ast-viewer)
-- Update [F# Tokens](https://github.com/nojaf/fsharp-tokens)
-- Update [Trivia Viewer](https://nojaf.github.io/trivia-tool/)
-- Update [Fantomas UI preview branch](https://gitlab.com/jindraivanek/fantomas-ui/tree/preview)
-- Update Fantomas (this repository, part 2): Create issues with Fantomas UI that cover new syntax.
-- After a release on NuGet, update [Fantomas UI master branch](https://gitlab.com/jindraivanek/fantomas-ui/tree/master)
+- Update Fantomas (this repository, part 1): Update the dependency, correct any compilation errors and update [AstTransformer](src\Fantomas\AstTransformer.fs) if needed.
+- Update [Fantomas Tools, group Server](https://github.com/fsprojects/fantomas-tools)
+- Update Fantomas (this repository, part 2): Create issues with [Fantomas Online](https://fsprojects.github.io/fantomas-tools/#/fantomas/preview) that cover new syntax.
+- After a release on NuGet, update [Fantomas Tools, group Latest](https://github.com/fsprojects/fantomas-tools)
 
 This doesn't mean that one person should do all the work ;)
 
@@ -277,7 +283,7 @@ rewriting it according to the provided formatting options.
 #### The `FormatConfig` type: format settings
 Settings such as :
  - indent values in spaces
- - reorder open declarations
+ - maximum page width
  - ...
 
 See [CodePrinter.fs](src/Fantomas/CodePrinter.fs).
@@ -290,6 +296,52 @@ that formats the string in input and prints it.
 ### Video series
 
 There is a [YouTube video series](https://www.youtube.com/playlist?list=PLvw_J2kfZCX3Mf6tEbIPZXbzJOD1VGl4K) on how Fantomas internally works.
+
+### Ionide
+
+When you want to contribute to this project in VSCode with Ionide, there  is a trick you need to know to debug Unit tests.
+
+After checking out the repository, open a terminal and set the `VSTEST_HOST_DEBUG` environment variable to `1`.
+
+In PowerShell:
+
+> $env:VSTEST_HOST_DEBUG=1
+
+or in Bash:
+
+> VSTEST_HOST_DEBUG=1
+
+Run a single unit test with `dotnet test --filter`.
+
+> cd .\src\Fantomas.Tests\
+> dotnet test --filter "record declaration"
+
+The output looks like:
+
+```
+Test run for C:\Temp\fantomas\src\Fantomas.Tests\bin\Debug\netcoreapp3.1\Fantomas.Tests.dll(.NETCoreApp,Version=v3.1)
+Microsoft (R) Test Execution Command Line Tool Version 16.3.0
+Copyright (c) Microsoft Corporation.  All rights reserved.
+
+Starting test execution, please wait...
+
+A total of 1 test files matched the specified pattern.
+Host debugging is enabled. Please attach debugger to testhost process to continue.
+Process Id: 20312, Name: dotnet
+```
+
+And we can now attach to the unit testing process.
+
+![Run .NET Core Attach ](./docs/fantomas-debug-vscode-1.png)
+
+![Choose process id](./docs/fantomas-debug-vscode-2.png)
+
+**Press the play button once the process has been chosen!**
+This might be a bit strange but you need to press play in order for the debugger to start working.
+
+![Hit the breakpoint](./docs/fantomas-debug-vscode-3.png)
+
+Check out this [video fragment](https://youtu.be/axHIazqiO9E?t=65) to see this in action.
 
 ## Credits
 We would like to gratefully thank the following persons for their contributions.

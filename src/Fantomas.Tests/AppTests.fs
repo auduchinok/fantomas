@@ -12,13 +12,15 @@ let a =
     b
     |> List.exists (fun p ->
         p.a && p.b |> List.exists (fun o -> o.a = "lorem ipsum dolor sit amet"))
-    """ { config with PageWidth = 80 }
+    """ { config with MaxLineLength = 80 }
     |> prepend newline
     |> should equal """
 let a =
     b
     |> List.exists (fun p ->
-        p.a && p.b |> List.exists (fun o -> o.a = "lorem ipsum dolor sit amet"))
+        p.a
+        && p.b
+        |> List.exists (fun o -> o.a = "lorem ipsum dolor sit amet"))
 """
 
 // compile error due to expression starting before the beginning of the function expression
@@ -39,12 +41,12 @@ let a s =
     |> prepend newline
     |> should equal @"
 let a s =
-    if s <> """" then
-        printfn """"""fooo
+    if s <> """"
+    then printfn """"""fooo
 %s
 %s
 %s
-%s""""""    (llloooooooooooooooooooooooooo s) s s s
+%s""""""     (llloooooooooooooooooooooooooo s) s s s
 "
 
 // compile error due to expression starting before the beginning of the function expression
@@ -61,7 +63,7 @@ let a s =
                             s
                                (llloooooooooooooooooooooooooo s)
                                      (llloooooooooooooooooooooooooo s)"
-        { config  with PageWidth = 50 } 
+        { config  with MaxLineLength = 50 } 
     |> prepend newline
     |> should equal @"
 let a s =
@@ -74,3 +76,132 @@ let a s =
             (llloooooooooooooooooooooooooo s)
             (llloooooooooooooooooooooooooo s)
 "
+
+[<Test>]
+let ``should split parameters over multiple lines when they exceed page width``() =
+    formatSourceString false """module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem compoundBalance None currency address sessionCachedNetworkData
+                    ()
+            )
+            ()""" { config with MaxLineLength = 60 }
+    |> prepend newline
+    |> should equal """
+module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency)
+                                              : NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem
+                            compoundBalance
+                            None
+                            currency
+                            address
+                            sessionCachedNetworkData
+                    ())
+            ()
+"""
+
+[<Test>]
+let ``should split single parameter over multiple lines when it exceeds page width``() =
+    formatSourceString false """module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
+                    ()
+            )
+            ()""" { config with MaxLineLength = 60 }
+    |> prepend newline
+    |> should equal """
+module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency)
+                                              : NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem
+                            looooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong
+                    ())
+            ()
+"""
+
+[<Test>]
+let ``should not split parameters over multiple lines when they do not exceed page width``() =
+    formatSourceString false """module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem compoundBalance None currency address sessionCachedNetworkData
+                    ()
+            )
+            ()""" { config with MaxLineLength = 120 }
+    |> prepend newline
+    |> should equal """
+module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress) (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m
+                    then ReportProblem compoundBalance None currency address sessionCachedNetworkData
+                    ())
+            ()
+"""
+
+[<Test>]
+let ``should not split single parameter over multiple lines when it does not exceed page width``() =
+    formatSourceString false """module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress)
+                                              (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then
+                        ReportProblem compoundBalance
+                    ()
+            )
+            ()""" { config with MaxLineLength = 120 }
+    |> prepend newline
+    |> should equal """
+module Caching =
+    type MainCache() =
+        member __.RetrieveLastCompoundBalance (address: PublicAddress) (currency: Currency): NotFresh<decimal> =
+            lock cacheFiles.CachedNetworkData (fun _ ->
+                match balance with
+                | NotAvailable -> NotAvailable
+                | Cached (balance, time) ->
+                    if compoundBalance < 0.0m then ReportProblem compoundBalance
+                    ())
+            ()
+"""

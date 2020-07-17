@@ -51,9 +51,7 @@ SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
 """  config
     |> should equal """#if INTERACTIVE
 #load "../FSharpx.TypeProviders/SetupTesting.fsx"
-
 SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
-
 #load "__setup__.fsx"
 #endif
 """
@@ -71,9 +69,7 @@ SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
     |> should equal """#if INTERACTIVE
 #else
 #load "../FSharpx.TypeProviders/SetupTesting.fsx"
-
 SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
-
 #load "__setup__.fsx"
 #endif
 """
@@ -89,12 +85,12 @@ let ``line, file and path identifiers``() =
     """ config
     |> prepend newline
     |> should equal """
-let printSourceLocation() =
+let printSourceLocation () =
     printfn "Line: %s" __LINE__
     printfn "Source Directory: %s" __SOURCE_DIRECTORY__
     printfn "Source File: %s" __SOURCE_FILE__
 
-printSourceLocation()
+printSourceLocation ()
 """
 
 [<Test>]
@@ -170,9 +166,32 @@ let [<Literal>] private assemblyConfig() =
     |> prepend newline
     |> should equal """
 [<Literal>]
-let private assemblyConfig() =
+let private assemblyConfig () =
 #if TRACE
     let x = ""
+#else
+    let x = "x"
+#endif
+    x
+"""
+
+[<Test>]
+let ``should break lines before compiler directives, no defines``() =
+    formatSourceStringWithDefines [] """
+let [<Literal>] private assemblyConfig() =
+  #if TRACE
+  let x = ""
+  #else
+  let x = "x"
+  #endif
+  x
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Literal>]
+let private assemblyConfig () =
+#if TRACE
+
 #else
     let x = "x"
 #endif
@@ -381,7 +400,7 @@ let ``some spacing is still lost in and around #if blocks, 303`` () =
     | Some key' -> assemblyName.HasPublicKey <- true
                    assemblyName.PublicKey <- key'.PublicKey // sets token implicitly
 #endif
-"""  config
+"""  ({ config with MaxInfixOperatorExpression = 75 })
     |> should equal """let internal UpdateStrongNaming (assembly: AssemblyDefinition) (key: StrongNameKeyPair option) =
     let assemblyName = assembly.Name
 #if NETCOREAPP2_0
@@ -442,7 +461,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 type FunctionComponent<'Props> = 'Props -> ReactElement
-
 type LazyFunctionComponent<'Props> = 'Props -> ReactElement
 
 type FunctionComponent =
@@ -456,8 +474,11 @@ type FunctionComponent =
             ReactBindings.React.``lazy`` (fun () ->
                 // React.lazy requires a default export
                 (importValueDynamic f).``then``(fun x -> createObj [ "default" ==> x ]))
+
         fun props ->
-            ReactElementType.create ReactBindings.React.Suspense (createObj [ "fallback" ==> fallback ])
+            ReactElementType.create
+                ReactBindings.React.Suspense
+                (createObj [ "fallback" ==> fallback ])
                 [ ReactElementType.create elemType props [] ]
 #else
 
@@ -509,7 +530,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 type FunctionComponent<'Props> = 'Props -> ReactElement
-
 type LazyFunctionComponent<'Props> = 'Props -> ReactElement
 
 type FunctionComponent =
@@ -579,7 +599,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 type FunctionComponent<'Props> = 'Props -> ReactElement
-
 type LazyFunctionComponent<'Props> = 'Props -> ReactElement
 
 type FunctionComponent =
@@ -646,7 +665,6 @@ open Fable.Core
 open Fable.Core.JsInterop
 
 type FunctionComponent<'Props> = 'Props -> ReactElement
-
 type LazyFunctionComponent<'Props> = 'Props -> ReactElement
 
 type FunctionComponent =
@@ -660,8 +678,11 @@ type FunctionComponent =
             ReactBindings.React.``lazy`` (fun () ->
                 // React.lazy requires a default export
                 (importValueDynamic f).``then``(fun x -> createObj [ "default" ==> x ]))
+
         fun props ->
-            ReactElementType.create ReactBindings.React.Suspense (createObj [ "fallback" ==> fallback ])
+            ReactElementType.create
+                ReactBindings.React.Suspense
+                (createObj [ "fallback" ==> fallback ])
                 [ ReactElementType.create elemType props [] ]
 #else
         fun _ -> div [] [] // React.lazy is not compatible with SSR, so just use an empty div
@@ -886,6 +907,7 @@ do  ()
 
 #endif
 [<assembly:Meh>]
+
 do ()
 """
 
@@ -905,6 +927,7 @@ do  ()
 [<assembly:Bar>]
 #endif
 [<assembly:Meh>]
+
 do ()
 """
 
@@ -1009,6 +1032,26 @@ let foo =
 """
 
 [<Test>]
+let ``preserve compile directive between piped functions, DEBUG`` () =
+    formatSourceStringWithDefines [] """let foo = [ 1 ]
+            |> List.sort
+#if DEBUG
+            |> List.rev
+#endif
+            |> List.sort
+"""  config
+    |> prepend newline
+    |> should equal """
+let foo =
+    [ 1 ]
+    |> List.sort
+#if DEBUG
+
+#endif
+    |> List.sort
+"""
+
+[<Test>]
 let ``async block inside directive, 576`` () =
     formatSourceString false """#if TEST
 let f () =
@@ -1021,7 +1064,7 @@ let f () =
     |> prepend newline
     |> should equal """
 #if TEST
-let f() =
+let f () =
     async {
         let x = 2
         return x
@@ -1042,7 +1085,7 @@ let f () =
     |> prepend newline
     |> should equal """
 #if TEST
-let f() =
+let f () =
     async {
         let x = 2
         return x
@@ -1066,7 +1109,7 @@ type internal Close =
   | ProcessExit
   | Pause
   | Resume
-"""  ({ config with IndentSpaceNum = 2 })
+"""  ({ config with IndentSize = 2 })
     |> prepend newline
     |> should equal """
 namespace AltCover.Recorder
@@ -1101,7 +1144,7 @@ type internal Close =
   | ProcessExit
   | Pause
   | Resume
-"""  ({ config with IndentSpaceNum = 2 })
+"""  ({ config with IndentSize = 2 })
     |> prepend newline
     |> should equal """
 namespace AltCover.Recorder
@@ -1136,7 +1179,7 @@ type internal Close =
   | ProcessExit
   | Pause
   | Resume
-"""  ({ config with IndentSpaceNum = 2 })
+"""  ({ config with IndentSize = 2 })
     |> prepend newline
     |> should equal """
 namespace AltCover.Recorder
@@ -1153,4 +1196,279 @@ type internal Close =
   | ProcessExit
   | Pause
   | Resume
+"""
+
+
+[<Test>]
+let ``namespace global mixed with hash directives, no directives`` () =
+    formatSourceStringWithDefines [] """namespace global
+
+#if DEBUG
+
+module Dbg =
+
+    open System
+    open System.Text
+
+    let seq fn = Seq.iter fn
+
+    let iff condition fn = if condition() then fn()
+
+    let tee fn a =
+        fn a
+        a
+
+    let teePrint x = tee (printfn "%A") x
+    let print x = printfn "%A" x
+#else
+module Dbg =
+    let tee (f: 'a -> unit) (x: 'a) = x
+    let teePrint x = x
+    let print _ = ()
+#endif
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace global
+
+#if DEBUG
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#else
+module Dbg =
+    let tee (f: 'a -> unit) (x: 'a) = x
+    let teePrint x = x
+    let print _ = ()
+#endif
+"""
+
+[<Test>]
+let ``namespace global mixed with hash directives, DEBUG`` () =
+    formatSourceStringWithDefines ["DEBUG"] """namespace global
+
+#if DEBUG
+
+module Dbg =
+
+    open System
+    open System.Text
+
+    let seq fn = Seq.iter fn
+
+    let iff condition fn = if condition() then fn()
+
+    let tee fn a =
+        fn a
+        a
+
+    let teePrint x = tee (printfn "%A") x
+    let print x = printfn "%A" x
+#else
+module Dbg =
+    let tee (f: 'a -> unit) (x: 'a) = x
+    let teePrint x = x
+    let print _ = ()
+#endif
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace global
+
+#if DEBUG
+
+module Dbg =
+
+    open System
+    open System.Text
+
+    let seq fn = Seq.iter fn
+
+    let iff condition fn = if condition () then fn ()
+
+    let tee fn a =
+        fn a
+        a
+
+    let teePrint x = tee (printfn "%A") x
+    let print x = printfn "%A" x
+#else
+
+
+
+
+#endif
+"""
+
+[<Test>]
+let ``namespace global mixed with hash directives, 681`` () =
+    formatSourceString false """namespace global
+
+#if DEBUG
+
+module Dbg =
+
+    open System
+    open System.Text
+
+    let seq fn = Seq.iter fn
+
+    let iff condition fn = if condition() then fn()
+
+    let tee fn a =
+        fn a
+        a
+
+    let teePrint x = tee (printfn "%A") x
+    let print x = printfn "%A" x
+#else
+module Dbg =
+    let tee (f: 'a -> unit) (x: 'a) = x
+    let teePrint x = x
+    let print _ = ()
+#endif
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace global
+
+#if DEBUG
+
+module Dbg =
+
+    open System
+    open System.Text
+
+    let seq fn = Seq.iter fn
+
+    let iff condition fn = if condition () then fn ()
+
+    let tee fn a =
+        fn a
+        a
+
+    let teePrint x = tee (printfn "%A") x
+    let print x = printfn "%A" x
+#else
+module Dbg =
+    let tee (f: 'a -> unit) (x: 'a) = x
+    let teePrint x = x
+    let print _ = ()
+#endif
+"""
+
+[<Test>]
+let ``defines in string should be taken into account, 761`` () =
+    (formatSourceString false "
+[<Test>]
+let ``should keep compiler directives``() =
+    formatSourceString false \"\"\"
+#if INTERACTIVE
+#load \"../FSharpx.TypeProviders/SetupTesting.fsx\"
+SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
+#load \"__setup__.fsx\"
+#endif
+\"\"\"  config
+    |> should equal \"\"\"#if INTERACTIVE
+#load \"../FSharpx.TypeProviders/SetupTesting.fsx\"
+SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
+#load \"__setup__.fsx\"
+#endif
+\"\"\"
+" config)
+    |> prepend newline
+    |> should equal "
+[<Test>]
+let ``should keep compiler directives`` () =
+    formatSourceString false \"\"\"
+#if INTERACTIVE
+#load \"../FSharpx.TypeProviders/SetupTesting.fsx\"
+SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
+#load \"__setup__.fsx\"
+#endif
+\"\"\"  config
+    |> should equal \"\"\"#if INTERACTIVE
+#load \"../FSharpx.TypeProviders/SetupTesting.fsx\"
+SetupTesting.generateSetupScript __SOURCE_DIRECTORY__
+#load \"__setup__.fsx\"
+#endif
+\"\"\"
+"
+
+[<Test>]
+let ``hash directive in single quote string should not have impact`` () =
+    formatSourceString false """let a = "
+#if FOO
+"
+let b = "
+#endif
+"
+"""  config
+    |> prepend newline
+    |> should equal """
+let a = "
+#if FOO
+"
+
+let b = "
+#endif
+"
+"""
+
+[<Test>]
+let ``hash directive in triple quote string with other quotes should not have impact`` () =
+    (formatSourceString false "
+let a = \"\"\"
+\"
+#if FOO
+\"
+\"\"\"
+let b = \"\"\"
+#endif
+\"\"\"
+"     config)
+    |> prepend newline
+    |> should equal "
+let a = \"\"\"
+\"
+#if FOO
+\"
+\"\"\"
+
+let b = \"\"\"
+#endif
+\"\"\"
+"
+
+[<Test>]
+let ``hash directive in single quote string should not have impact - escaped quote`` () =
+    formatSourceString false """let a = "
+#if FOO
+\""
+let b = "
+#endif
+"
+"""  config
+    |> prepend newline
+    |> should equal """
+let a = "
+#if FOO
+\""
+
+let b = "
+#endif
+"
 """

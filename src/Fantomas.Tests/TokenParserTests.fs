@@ -12,8 +12,6 @@ let private isNewline item =
     | Newline -> true
     | _ -> false
 
-let getTriviaFromTokens = getTriviaFromTokens config
-
 [<Test>]
 let ``Simple compiler directive should be found`` () =
     let source = """
@@ -173,18 +171,20 @@ let ``Multi line block comment should be found in tokens`` () =
         failwith "expected block comment"
         
 [<Test>]
-let ``Multiple line comment should be found in tokens`` () =
+let ``multiple line comment should be found in tokens`` () =
     let source = """// meh
 // foo
 let a = 9
 """
     let (tokens,lineCount) = tokenize [] source
     let triviaNodes = getTriviaFromTokens tokens lineCount
+
+    let expectedComment = String.normalizeNewLine """// meh
+// foo"""
     
     match triviaNodes with
-    | ({ Item = Comment(LineCommentOnSingleLine(l1)) })::({ Item = Comment(LineCommentOnSingleLine(l2)) })::_ ->
-        l1 == "// meh"
-        l2 == "// foo"
+    | ({ Item = Comment(LineCommentOnSingleLine(l1)) })::_ ->
+        String.normalizeNewLine l1 == expectedComment
     | _ ->
         failwith "Expected two line comments"
         
@@ -241,10 +241,11 @@ let ``Comment after left brace of record`` () =
 let ``left brace should be found in tokens`` () =
     let source = "type R = { A: int }"
     let (tokens, _) = tokenize [] source
-    let triviaNodes = getTriviaNodesFromTokens tokens
+    let triviaNodes =
+        getTriviaNodesFromTokens tokens
     
-    match triviaNodes with
-    | [{Type = Token(equals)}; {Type = Token(lbrace)} ; {Type = Token(rbrace)}] ->
+    match triviaNodes.[0].Type, triviaNodes.[1].Type, triviaNodes.[2].Type with
+    | Token(equals), Token(lbrace), Token(rbrace) ->
         equals.Content == "="
         lbrace.Content == "{"
         rbrace.Content == "}"
@@ -416,3 +417,101 @@ let ``escaped char content`` () =
     | [{ Item = CharContent("\'\\u0000\'") }] ->
         pass()
     | _ -> fail()
+
+[<Test>]
+let ``open close of string on same line`` () =
+    let source = "
+let a = \"\"
+#if FOO
+#if BAR
+#endif
+#endif
+"
+
+    getDefines source == ["FOO";"BAR"]
+
+[<Test>]
+let ``open close of triple quote string on same line`` () =
+    let source = "
+let a = \"\"\"foo\"\"\"
+#if FOO
+#endif
+"
+
+    getDefines source == ["FOO"]
+
+[<Test>]
+let ``open, quote, close of triple quote string on same line`` () =
+    let source = "
+let a = \"\"\"fo\"o\"\"\"
+#if FOO
+#endif
+"
+
+    getDefines source == ["FOO"]
+    
+[<Test>]
+let ``defines inside string`` () =
+    let source = "
+let a = \"
+#if FOO
+#if BAR
+#endif
+#endif
+\"
+"
+
+    getDefines source == []
+
+[<Test>]
+let ``defines inside string, escaped quote`` () =
+    let source = "
+let a = \"\\\"
+#if FOO
+#if BAR
+#endif
+#endif
+\"
+"
+
+    getDefines source == []
+
+
+[<Test>]
+let ``defines inside triple quote string`` () =
+    let source = "
+let a = \"\"\"
+#if FOO
+#if BAR
+#endif
+#endif
+\"\"\"
+"
+
+    getDefines source == []
+
+[<Test>]
+let ``defines inside triple quote string, escaped quote`` () =
+    let source = "
+let a = \"\"\"\\\"
+#if FOO
+#if BAR
+#endif
+#endif
+\"\"\"
+"
+
+    getDefines source == []
+
+[<Test>]
+let ``defines inside triple quote string, escaped triple quote`` () =
+    let source = "
+let a = \"\"\"\\\"\"\"
+#if FOO
+#if BAR
+#endif
+#endif
+\"\"\"
+"
+
+    getDefines source == []

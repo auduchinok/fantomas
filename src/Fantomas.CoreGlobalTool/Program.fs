@@ -3,32 +3,19 @@ open System.IO
 open Fantomas
 open Fantomas.FormatConfig
 open Argu
+open System.Text
 
 let extensions = set [| ".fs"; ".fsx"; ".fsi"; ".ml"; ".mli"; |]
 
 type Arguments =
-    | [<Unique>] Recurse
+    | [<Unique; AltCommandLine("-r")>] Recurse
     | [<Unique>] Force
     | [<Unique>] Profile
     | [<Unique>] Fsi of string
     | [<Unique>] Stdin
     | [<Unique>] Stdout
     | [<Unique>] Out of string
-    | [<Unique>] Indent of int
     | [<Unique>] Check
-    | [<Unique;AltCommandLine("--pageWidth")>] PageWidth of int
-    | [<Unique;AltCommandLine("--semicolonEOL")>] SemicolonEOL
-    | [<Unique;AltCommandLine("--noSpaceBeforeArgument")>] NoSpaceBeforeArgument
-    | [<Unique;AltCommandLine("--spaceBeforeColon")>] SpaceBeforeColon
-    | [<Unique;AltCommandLine("--noSpaceAfterComma")>] NoSpaceAfterComma
-    | [<Unique;AltCommandLine("--noSpaceAfterSemiColon")>] NoSpaceAfterSemiColon
-    | [<Unique;AltCommandLine("--indentOnTryWith")>] IndentOnTryWith
-    | [<Unique;AltCommandLine("--reorderOpenDeclaration")>] ReorderOpenDeclaration
-    | [<Unique;AltCommandLine("--noSpaceAroundDelimiter")>] NoSpaceAroundDelimiter
-    | [<Unique;AltCommandLine("--keepNewlineAfter")>] KeepNewlineAfter
-    | [<Unique;AltCommandLine("--maxIfThenElseShortWidth ")>] MaxIfThenElseShortWidth of int
-    | [<Unique;AltCommandLine("--strictMode")>] StrictMode
-    | [<Unique;AltCommandLine("-c")>] Config of string
     | [<Unique;AltCommandLine("-v")>] Version
     | [<MainCommand>] Input of string
 with
@@ -42,21 +29,7 @@ with
             | Fsi _ -> "Read F# source from stdin as F# signatures."
             | Stdin -> "Read F# source from standard input."
             | Stdout -> " Write the formatted source code to standard output."
-            | Indent _ -> "Set number of spaces for indentation (default = 4). The value should be between 1 and 10."
             | Check -> "Don't format files, just check if they have changed. Exits with 0 if it's formatted correctly, with 1 if some files need formatting and 99 if there was an internal error"
-            | PageWidth _ -> "Set the column where we break to new lines (default = 80). The value should be at least 60."
-            | SemicolonEOL -> "Enable semicolons at the end of line (default = false)."
-            | NoSpaceBeforeArgument -> "Disable spaces before the first argument of functions when there are parenthesis (default = true). For methods and constructors, there are never spaces regardless of this option."
-            | SpaceBeforeColon -> "Enable spaces before colons (default = false)."
-            | NoSpaceAfterComma -> "Disable spaces after commas (default = true)."
-            | NoSpaceAfterSemiColon -> "Disable spaces after semicolons (default = true)."
-            | IndentOnTryWith -> "Enable indentation on try/with block (default = false)."
-            | ReorderOpenDeclaration -> "[DEPRECATED] Enable reordering open declarations (default = false)."
-            | NoSpaceAroundDelimiter -> "Disable spaces after starting and before ending of lists, arrays, sequences and records (default = true)."
-            | KeepNewlineAfter -> "Keep newlines found after = in let bindings, -> in pattern matching and chained function calls (default = false)."
-            | MaxIfThenElseShortWidth _ -> "Set the max length of any expression in an if expression before formatting on multiple lines (default = 40)."
-            | StrictMode -> "Enable strict mode (ignoring directives and comments and printing literals in canonical forms) (default = false)."
-            | Config _ -> "Use configuration found in file or folder."
             | Version -> "Displays the version of Fantomas"
             | Input _ -> sprintf "Input path: can be a folder or file with %s extension." (Seq.map (fun s -> "*" + s) extensions |> String.concat ",")
 
@@ -93,13 +66,29 @@ let rec allFiles isRec path =
     Directory.GetFiles(path, "*.*", searchOption)
     |> Seq.filter (fun f -> isFSharpFile f && not (isInExcludedDir f))
 
+/// Fantomas assumes the input files are UTF-8
+/// As is stated in F# language spec: https://fsharp.org/specs/language-spec/4.1/FSharpSpec-4.1-latest.pdf#page=25
+let private hasByteOrderMark file =
+    if File.Exists(file) then
+        let preamble = Encoding.UTF8.GetPreamble()
+        use file = new FileStream(file, FileMode.Open, FileAccess.Read)
+        let mutable bom = Array.zeroCreate 3
+        file.Read(bom, 0, 3) |> ignore
+        bom = preamble
+    else
+        false
+
 /// Format a source string using given config and write to a text writer
 let processSourceString isFsiFile s (tw : Choice<TextWriter, string>) config =
     let fileName = if isFsiFile then "/tmp.fsi" else "/tmp.fsx"
     let writeResult (formatted: string) =
         match tw with
         | Choice1Of2 tw -> tw.Write(formatted)
-        | Choice2Of2 path -> File.WriteAllText(path, formatted)
+        | Choice2Of2 path ->
+            if hasByteOrderMark path then
+                File.WriteAllText(path, formatted, Encoding.UTF8)
+            else
+                File.WriteAllText(path, formatted)
 
     async {
         let! formatted = s |> FakeHelpers.formatContentAsync config fileName
@@ -115,9 +104,9 @@ let processSourceString isFsiFile s (tw : Choice<TextWriter, string>) config =
     |> Async.RunSynchronously
 
 /// Format inFile and write to text writer
-let processSourceFile inFile (tw : TextWriter) config =
+let processSourceFile inFile (tw : TextWriter) =
     async {
-        let! formatted = inFile |> FakeHelpers.formatFileAsync config
+        let! formatted = FakeHelpers.formatFileAsync inFile
 
         match formatted with
         | FakeHelpers.FormatResult.Formatted(_, formattedContent) ->
@@ -166,8 +155,8 @@ let private reportCheckResults (output: TextWriter) (checkResult: FakeHelpers.Ch
     |> List.map (fun filename -> sprintf "%s needs formatting" filename)
     |> Seq.iter output.WriteLine
 
-let runCheckCommand (config: FormatConfig) (recurse: bool) (inputPath: InputPath) : int =
-    let check files = Async.RunSynchronously (FakeHelpers.checkCode config files)
+let runCheckCommand (recurse: bool) (inputPath: InputPath) : int =
+    let check files = Async.RunSynchronously (FakeHelpers.checkCode files)
 
     let processCheckResult (checkResult: FakeHelpers.CheckResult) =
         if checkResult.IsValid then
@@ -192,8 +181,6 @@ let runCheckCommand (config: FormatConfig) (recurse: bool) (inputPath: InputPath
         |> allFiles recurse
         |> check
         |> processCheckResult
-
-
 
 [<EntryPoint>]
 let main argv =
@@ -237,63 +224,23 @@ let main argv =
         let recurse = results.Contains<@ Arguments.Recurse @>
         let version = results.TryGetResult<@ Arguments.Version @>
 
-        let config =
-            let defaultConfig =
-                results.TryGetResult<@ Arguments.Config @>
-                |> Option.map (fun configPath ->
-                    let configResult = CodeFormatter.ReadConfiguration configPath
-                    match configResult with
-                    | Success s -> s
-                    | PartialSuccess (ps, warnings) ->
-                        List.iter (writeInColor ConsoleColor.DarkYellow) warnings
-                        ps
-                    | Failure e ->
-                        writeInColor ConsoleColor.DarkRed "Couldn't process one or more Fantomas configuration files, falling back to the default configuration"
-                        writeInColor ConsoleColor.DarkRed (e.ToString())
-                        FormatConfig.Default
-                )
-                |> Option.defaultValue FormatConfig.Default
-
-            results.GetAllResults()
-            |> List.fold (fun acc msg ->
-                match msg with
-                | Recurse
-                | Force
-                | Out _
-                | Profile
-                | Fsi _
-                | Stdin _
-                | Stdout
-                | Check
-                | Config _
-                | Version
-                | Input _ -> acc
-                | Indent i -> { acc with IndentSpaceNum = i }
-                | PageWidth pw -> { acc with PageWidth = pw }
-                | SemicolonEOL -> { acc with SemicolonAtEndOfLine = true }
-                | NoSpaceBeforeArgument -> { acc with SpaceBeforeArgument = false }
-                | SpaceBeforeColon -> { acc with SpaceBeforeColon = true }
-                | NoSpaceAfterComma -> { acc with SpaceAfterComma = false }
-                | NoSpaceAfterSemiColon -> { acc with SpaceAfterSemicolon = false }
-                | IndentOnTryWith -> { acc with IndentOnTryWith = true }
-                | ReorderOpenDeclaration ->
-                    writeInColor ConsoleColor.DarkYellow "Warning: ReorderOpenDeclaration will be removed in the next major version. Using this feature can lead to compilation errors after formatting."
-                    { acc with ReorderOpenDeclaration = true }
-                | NoSpaceAroundDelimiter -> { acc with SpaceAroundDelimiter = false }
-                | KeepNewlineAfter -> { acc with KeepNewlineAfter = true }
-                | MaxIfThenElseShortWidth m -> { acc with MaxIfThenElseShortWidth = m }
-                | StrictMode -> { acc with StrictMode = true }
-            ) defaultConfig
-
-        let fileToFile (inFile : string) (outFile : string) config =
+        let fileToFile (inFile : string) (outFile : string) =
             try
                 printfn "Processing %s" inFile
-                use buffer = new StreamWriter(outFile)
+                let hasByteOrderMark = hasByteOrderMark inFile
+
+                use buffer =
+                    if hasByteOrderMark then
+                        new StreamWriter(new FileStream(outFile, FileMode.OpenOrCreate, FileAccess.ReadWrite)
+                                         ,Encoding.UTF8)
+                    else
+                        new StreamWriter(outFile)
+
                 if profile then
                     File.ReadLines(inFile) |> Seq.length |> printfn "Line count: %i"
-                    time (fun () -> processSourceFile inFile buffer config)
+                    time (fun () -> processSourceFile inFile buffer)
                 else
-                    processSourceFile inFile buffer config
+                    processSourceFile inFile buffer
                 buffer.Flush()
                 printfn "%s has been written." outFile
             with
@@ -330,11 +277,13 @@ let main argv =
                 if force then
                     stdout.Write(s)
 
-        let processFile inputFile outputFile config =
+        let processFile inputFile outputFile =
             if inputFile <> outputFile then
-                fileToFile inputFile outputFile config
+                fileToFile inputFile outputFile
             else
+                printfn "Processing %s" inputFile
                 let content = File.ReadAllText inputFile
+                let config = CodeFormatter.ReadConfiguration(inputFile)
                 stringToFile content inputFile config
 
         let processFolder inputFolder outputFolder =
@@ -349,21 +298,19 @@ let main argv =
                         Path.Combine(outputFolder, suffix)
                     else i
 
-                processFile i o config)
+                processFile i o)
 
-        let fileToStdOut inFile config =
+        let fileToStdOut inFile =
             try
                 use buffer = new StringWriter()
                 // Don't record running time when output formatted content to console
-                processSourceFile inFile buffer config
+                processSourceFile inFile buffer
                 stdout.Write(buffer.ToString())
             with
             | exn ->
                 eprintfn "The following exception occurred while formatting %s: %O" inFile exn
                 if force then
                     stdout.Write(File.ReadAllText inFile)
-
-
 
         if Option.isSome version then
             let version = CodeFormatter.GetVersion()
@@ -372,7 +319,7 @@ let main argv =
             let check = results.Contains<@ Arguments.Check @>
             if check then
                 inputPath
-                |> runCheckCommand config recurse
+                |> runCheckCommand recurse
                 |> exit
             else
                 match inputPath, outputPath with
@@ -380,18 +327,18 @@ let main argv =
                     eprintfn "Input path is missing..."
                     exit 1
                 | InputPath.Folder p1, OutputPath.Notknown -> processFolder p1 p1
-                | InputPath.File p1, OutputPath.Notknown -> processFile p1 p1 config
+                | InputPath.File p1, OutputPath.Notknown -> processFile p1 p1
                 | InputPath.File p1, OutputPath.IO p2 ->
-                    processFile p1 p2 config
+                    processFile p1 p2
                 | InputPath.Folder p1, OutputPath.IO p2 -> processFolder p1 p2
                 | InputPath.StdIn s, OutputPath.IO p ->
-                    stringToFile s p config
+                    stringToFile s p FormatConfig.Default
                 | InputPath.StdIn s, OutputPath.Notknown
                 | InputPath.StdIn s, OutputPath.StdOut ->
-                    stringToStdOut s config
+                    stringToStdOut s FormatConfig.Default
                 | InputPath.File p, OutputPath.StdOut ->
-                    fileToStdOut p config
+                    fileToStdOut p
                 | InputPath.Folder p, OutputPath.StdOut ->
                     allFiles recurse p
-                    |> Seq.iter (fun p -> fileToStdOut p config)
+                    |> Seq.iter fileToStdOut
         0

@@ -8,6 +8,10 @@ module internal TriviaHelpers =
     let findByRange (trivia: TriviaNode list) (range: range) =
         trivia
         |> List.tryFind (fun t -> t.Range = range)
+    
+    let findInRange (trivia: TriviaNode list) (range:range) =
+        trivia
+        |> List.tryFind (fun t -> RangeHelpers.``range contains`` range t.Range)
 
     let findFirstContentBeforeByRange (trivia: TriviaNode list) (range: range) =
         findByRange trivia range
@@ -61,6 +65,13 @@ module internal TriviaHelpers =
             | Some(CharContent c) -> Some c
             | _ -> None)
 
+    let ``has content itself that matches`` (predicate: TriviaContent -> bool) range (triviaNodes: TriviaNode list) =
+        triviaNodes
+        |> List.exists (fun tn ->
+            match tn.Range = range, tn.ContentItself with
+            | true, Some(t) -> predicate t
+            | _ -> false)
+
     let ``has content itself is ident between ticks`` range (triviaNodes: TriviaNode list) =
         triviaNodes
         |> List.choose (fun tn ->
@@ -68,3 +79,23 @@ module internal TriviaHelpers =
             | true, Some(IdentBetweenTicks(ident)) -> Some ident
             | _ -> None)
         |> List.tryHead
+
+    let ``has content itself that is multiline string`` range (triviaNodes: TriviaNode list) =
+        triviaNodes
+        |> List.choose (fun tn ->
+            match tn.Range = range, tn.ContentItself with
+            | true, Some(StringContent(s)) when (String.isMultiline s) -> Some s
+            | _ -> None)
+        |> List.isNotEmpty
+
+    let private isLineComment =
+            function
+            | Comment(LineCommentAfterSourceCode _)
+            | Comment(LineCommentOnSingleLine _) -> true
+            | _ -> false
+
+    let ``has line comments inside`` range (triviaNodes: TriviaNode list) =
+        triviaNodes
+        |> List.exists (fun tn ->
+            RangeHelpers.``range contains`` range tn.Range
+            && (List.exists isLineComment tn.ContentBefore || List.exists isLineComment tn.ContentAfter))

@@ -13,7 +13,7 @@ let f x =
     <|> if someveryveryveryverylongexpression then someveryveryveryverylongexpression else someveryveryveryverylongexpression
     <|> if someveryveryveryverylongexpression then someveryveryveryverylongexpression else someveryveryveryverylongexpression
     |> f
-    """ { config with PageWidth = 80 }
+    """ { config with MaxLineLength = 80 }
     |> prepend newline
     |> should equal """
 let f x =
@@ -56,7 +56,7 @@ let runAll() =
     |> Async.RunSynchronously |> ignore""" config
     |> prepend newline
     |> should equal """
-let runAll() =
+let runAll () =
     urlList
     |> Seq.map fetchAsync
     |> Async.Parallel
@@ -74,8 +74,5 @@ let prefetchImages =
     |> should equal """
 let prefetchImages =
     [ playerOImage; playerXImage ]
-    |> List.map (fun img ->
-        link
-            [ Rel "prefetch"
-              Href img ])
+    |> List.map (fun img -> link [ Rel "prefetch"; Href img ])
 """    

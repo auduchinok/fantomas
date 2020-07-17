@@ -12,7 +12,7 @@ type Funcs =
     [<Extension>]
     static member ToFunc (f: Action<_,_,_>) =
         Func<_,_,_,_>(fun a b c -> f.Invoke(a,b,c))
-    """ config
+    """ { config with MaxFunctionBindingWidth = 120 }
     |> should equal """[<Extension>]
 type Funcs =
     [<Extension>]
@@ -112,9 +112,9 @@ and [<Test>] b () = 10""" config
     |> prepend newline
     |> should equal """
 [<Test>]
-let rec a() = 10
+let rec a () = 10
 
-and [<Test>] b() = 10
+and [<Test>] b () = 10
 """
 
 [<Test>]
@@ -190,7 +190,7 @@ let printInStyle (style: string) (msg): unit = jsNative
 let printModel model: unit = jsNative
 
 [<Emit("console.trace()")>]
-let printStackTrace(): unit = jsNative
+let printStackTrace (): unit = jsNative
 #endif
 
 let e2e value = Props.Data("e2e", value)
@@ -231,16 +231,17 @@ let ``different attributes according to defines`` () =
 #endif
       DefaultValue(true)>]
     let foo = ()"""  config
-    |> should equal """[<
+    |> prepend newline
+    |> should equal """
+[<
 #if NETCOREAPP2_1
-Builder.Object;
+  Builder.Object;
 #else
-Widget;
+  Widget;
 #endif
-DefaultValue(true)>]
+  DefaultValue(true)>]
 let foo = ()
 """
-
 
 [<Test>]
 let ``different attributes according to defines, no defines`` () =
@@ -252,13 +253,15 @@ let ``different attributes according to defines, no defines`` () =
 #endif
       DefaultValue(true)>]
     let foo = ()"""  config
-    |> should equal """[<
+    |> prepend newline
+    |> should equal """
+[<
 #if NETCOREAPP2_1
 
 #else
-Widget;
+  Widget;
 #endif
-DefaultValue(true)>]
+  DefaultValue(true)>]
 let foo = ()
 """
 
@@ -292,7 +295,7 @@ let main argv =
             SpaceAfterComma = false
             SpaceAfterSemicolon = false
             SpaceAroundDelimiter = false
-            SpaceBeforeArgument = false })
+            SpaceBeforeLowercaseInvocation = false })
     |> prepend newline
     |> should equal """
 open System
@@ -305,4 +308,146 @@ let main argv =
     |> Array.map getJsonNetJson
     |> Array.iter(printfn "%s")
     0 // return an integer exit code
+"""
+
+[<Test>]
+let ``multiple assembly attributes, 796`` () =
+    formatSourceString false """namespace Foo.AssemblyInfo
+
+open System.Reflection
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+
+[<assembly: AssemblyTitle("Foo")>]
+[<assembly: AssemblyDescription("")>]
+
+do
+  ()
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Foo.AssemblyInfo
+
+open System.Reflection
+open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+
+[<assembly:AssemblyTitle("Foo")>]
+[<assembly:AssemblyDescription("")>]
+
+do ()
+"""
+
+[<Test>]
+let ``should preserve single return type attribute`` () =
+    formatSourceString false """let f x : [<return: Attribute>] int = x""" config
+    |> should equal """let f x: [<return:Attribute>] int = x
+"""
+
+[<Test>]
+let ``should preserve multiple return type attributes`` () =
+    formatSourceString false """let f x : [<return: AttributeOne;AttributeTwo;AttributeThree("foo")>] int = x""" config
+    |> should equal """let f x: [<return:AttributeOne; AttributeTwo; AttributeThree("foo")>] int = x
+"""
+
+[<Test>]
+let ``attribute, new line, let binding`` () =
+    formatSourceString false """
+    [<Foo>]
+
+let bar = 7
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Foo>]
+
+let bar = 7
+"""
+
+[<Test>]
+let ``attribute, new line, type declaration`` () =
+    formatSourceString false """
+[<Foo>]
+
+type Bar = Bar of string
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Foo>]
+
+type Bar = Bar of string
+"""
+
+[<Test>]
+let ``attribute, new line, attribute, newline, let binding`` () =
+    formatSourceString false """
+[<Foo>]
+
+[<Meh>]
+
+let bar = 7
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Foo>]
+
+[<Meh>]
+
+let bar = 7
+"""
+
+[<Test>]
+let ``attribute, new line, attribute, line comment, type declaration`` () =
+    formatSourceString false """
+[<Foo>]
+
+[<Meh>]
+// foo
+type Text = string
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Foo>]
+
+[<Meh>]
+// foo
+type Text = string
+"""
+
+[<Test>]
+let ``attribute, hash directive, attribute, hash directive, type declaration`` () =
+    formatSourceString false """
+[<Foo>]
+#if FOO
+[<Meh>]
+#endif
+type Text = string
+"""  config
+    |> prepend newline
+    |> should equal """
+[<Foo>]
+#if FOO
+[<Meh>]
+#endif
+type Text = string
+"""
+
+[<Test>]
+let ``attribute, line comment, attribute, new line, record definition field`` () =
+    formatSourceString false """
+type Commenter =
+    { [<JsonProperty("display_name")>]
+      // foo
+      [<Bar>]
+      
+      DisplayName: string }
+"""  config
+    |> prepend newline
+    |> should equal """
+type Commenter =
+    { [<JsonProperty("display_name")>]
+      // foo
+      [<Bar>]
+
+      DisplayName: string }
 """
