@@ -2,107 +2,73 @@
 
 open System
 
-let SAT_SOLVE_MAX_STEPS = 100
+let satSolveMaxStepsMaxSteps = 100
 
 type FormatException(msg : string) =
     inherit Exception(msg)
 
 type Num = int
 
+// NOTE: try to keep this list below in sync with the docs (e.g. Documentation.md)
 type FormatConfig = 
     { /// Number of spaces for each indentation
-      IndentSpaceNum : Num
+      IndentSize : Num
       /// The column where we break to new lines
-      PageWidth : Num
+      MaxLineLength : Num
       SemicolonAtEndOfLine : bool
-      SpaceBeforeArgument : bool
+      SpaceBeforeParameter: bool
+      SpaceBeforeLowercaseInvocation: bool
+      SpaceBeforeUppercaseInvocation: bool
+      SpaceBeforeClassConstructor : bool
+      SpaceBeforeMember : bool
       SpaceBeforeColon : bool
       SpaceAfterComma : bool
       SpaceBeforeSemicolon : bool
       SpaceAfterSemicolon : bool
       IndentOnTryWith : bool
-      /// Reordering and deduplicating open statements
-      ReorderOpenDeclaration : bool
       SpaceAroundDelimiter : bool
-      KeepNewlineAfter : bool
       MaxIfThenElseShortWidth: Num
-      /// Prettyprinting based on ASTs only
+      MaxInfixOperatorExpression: Num
+      MaxRecordWidth: Num
+      MaxArrayOrListWidth: Num
+      MaxValueBindingWidth: Num
+      MaxFunctionBindingWidth: Num
+      MultilineBlockBracketsOnSameColumn : bool
+      NewlineBetweenTypeDefinitionAndMembers: bool
+      KeepIfThenInSameLine : bool
+      MaxElmishWidth: Num
+      SingleArgumentWebMode: bool
+      AlignFunctionSignatureToIndentation: bool
+      AlternativeLongMemberDefinitions: bool
+      /// Pretty printing based on ASTs only
       StrictMode : bool }
 
     static member Default = 
-        { IndentSpaceNum = 4
-          PageWidth = 120
+        { IndentSize = 4
+          MaxLineLength = 120
           SemicolonAtEndOfLine = false
-          SpaceBeforeArgument = true
+          SpaceBeforeParameter = true
+          SpaceBeforeLowercaseInvocation = true
+          SpaceBeforeUppercaseInvocation = false
+          SpaceBeforeClassConstructor = false
+          SpaceBeforeMember = false
           SpaceBeforeColon = false
           SpaceAfterComma = true
           SpaceBeforeSemicolon = false
           SpaceAfterSemicolon = true
           IndentOnTryWith = false
-          ReorderOpenDeclaration = false
           SpaceAroundDelimiter = true
-          KeepNewlineAfter = false
           MaxIfThenElseShortWidth = 40
+          MaxInfixOperatorExpression = 50
+          MaxRecordWidth = 40
+          MaxArrayOrListWidth = 40
+          MaxValueBindingWidth = 40
+          MaxFunctionBindingWidth = 40
+          MultilineBlockBracketsOnSameColumn = false
+          NewlineBetweenTypeDefinitionAndMembers = false
+          KeepIfThenInSameLine = false
+          MaxElmishWidth = 40
+          SingleArgumentWebMode = false
+          AlignFunctionSignatureToIndentation = false
+          AlternativeLongMemberDefinitions = false
           StrictMode = false }
-
-    static member create(indentSpaceNum, pageWith, semicolonAtEndOfLine, 
-                         spaceBeforeArgument, spaceBeforeColon, spaceAfterComma, 
-                         spaceAfterSemicolon, indentOnTryWith, reorderOpenDeclaration) =
-        { FormatConfig.Default with
-              IndentSpaceNum = indentSpaceNum; 
-              PageWidth = pageWith;
-              SemicolonAtEndOfLine = semicolonAtEndOfLine; 
-              SpaceBeforeArgument = spaceBeforeArgument; 
-              SpaceBeforeColon = spaceBeforeColon;
-              SpaceAfterComma = spaceAfterComma; 
-              SpaceAfterSemicolon = spaceAfterSemicolon; 
-              IndentOnTryWith = indentOnTryWith; 
-              ReorderOpenDeclaration = reorderOpenDeclaration }
-
-    static member create(indentSpaceNum, pageWith, semicolonAtEndOfLine, 
-                         spaceBeforeArgument, spaceBeforeColon, spaceAfterComma, 
-                         spaceAfterSemicolon, indentOnTryWith, reorderOpenDeclaration, spaceAroundDelimiter) =
-        { FormatConfig.Default with
-              IndentSpaceNum = indentSpaceNum; 
-              PageWidth = pageWith;
-              SemicolonAtEndOfLine = semicolonAtEndOfLine; 
-              SpaceBeforeArgument = spaceBeforeArgument; 
-              SpaceBeforeColon = spaceBeforeColon;
-              SpaceAfterComma = spaceAfterComma; 
-              SpaceAfterSemicolon = spaceAfterSemicolon; 
-              IndentOnTryWith = indentOnTryWith; 
-              ReorderOpenDeclaration = reorderOpenDeclaration;
-              SpaceAroundDelimiter = spaceAroundDelimiter }
-
-    static member create(indentSpaceNum, pageWith, semicolonAtEndOfLine, 
-                         spaceBeforeArgument, spaceBeforeColon, spaceAfterComma, 
-                         spaceAfterSemicolon, indentOnTryWith, reorderOpenDeclaration, 
-                         spaceAroundDelimiter, strictMode) =
-        { FormatConfig.Default with
-              IndentSpaceNum = indentSpaceNum; 
-              PageWidth = pageWith;
-              SemicolonAtEndOfLine = semicolonAtEndOfLine; 
-              SpaceBeforeArgument = spaceBeforeArgument; 
-              SpaceBeforeColon = spaceBeforeColon;
-              SpaceAfterComma = spaceAfterComma; 
-              SpaceAfterSemicolon = spaceAfterSemicolon; 
-              IndentOnTryWith = indentOnTryWith; 
-              ReorderOpenDeclaration = reorderOpenDeclaration;
-              SpaceAroundDelimiter = spaceAroundDelimiter;
-              StrictMode = strictMode }
-
-    static member applyOptions(currentConfig, options) =
-        let currentValues = Reflection.getRecordFields currentConfig
-        let newValues =
-            Array.fold (fun acc (k,v) ->
-                Array.map (fun (fn, ev) -> if fn = k then (fn, v) else (fn,ev)) acc
-            ) currentValues options
-            |> Array.map snd
-        let formatConfigType = FormatConfig.Default.GetType()
-        Microsoft.FSharp.Reflection.FSharpValue.MakeRecord (formatConfigType, newValues) :?> FormatConfig
-
-type FormatConfigFileParseResult =
-    | Success of FormatConfig
-    | PartialSuccess of config: FormatConfig * warnings: string list
-    | Failure of exn
-

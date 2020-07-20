@@ -2,9 +2,10 @@
 
 open System
 open System.Diagnostics
-open FSharp.Compiler.Range
-open FSharp.Compiler.Ast
 open FSharp.Compiler.PrettyNaming
+open FSharp.Compiler.Range
+open FSharp.Compiler.SyntaxTree
+open FSharp.Compiler.XmlDoc
 open Fantomas
 open Fantomas.Context
 open FSharp.Compiler.SourceCodeServices.PrettyNaming
@@ -18,7 +19,7 @@ type Debug = Console
 #endif
 
 [<Literal>]
-let maxLength = 512
+let MaxLength = 512
 
 /// Get source string content based on range value
 let lookup (r : range) (c : Context) =
@@ -29,7 +30,7 @@ let lookup (r : range) (c : Context) =
         let finishLength = c.Positions.[r.EndLine] - c.Positions.[r.EndLine-1]
         let content = c.Content
         // Any line with more than 512 characters isn't reliable for querying
-        if start > finish || startLength >= maxLength || finishLength >= maxLength then
+        if start > finish || startLength >= MaxLength || finishLength >= MaxLength then
             Debug.WriteLine("Can't lookup between start = {0} and finish = {1}", start, finish)
             None
         else
@@ -98,8 +99,7 @@ let (|OpName|) (x : Identifier) =
         | Id(Ident s) | LongId(LongIdent s) -> 
             DecompileOpName s
 
-/// Operators in their declaration form
-let (|OpNameFull|) (x : Identifier) =
+let (|OpNameFullInPattern|) (x: Identifier) =
     let r = x.Ranges
     let s = x.Text
     let s' = DecompileOpName s
@@ -108,6 +108,23 @@ let (|OpNameFull|) (x : Identifier) =
         if String.startsWithOrdinal "*" s' && s' <> "*" then
             sprintf "( %s )" s'
         else sprintf "(%s)" s'
+    else
+        match x with
+        | Id(Ident s) | LongId(LongIdent s) ->
+            DecompileOpName s
+    |> fun s -> (s, r)
+
+
+/// Operators in their declaration form
+let (|OpNameFull|) (x : Identifier) =
+    let r = x.Ranges
+    let s = x.Text
+    let s' = DecompileOpName s
+
+    if IsActivePatternName s then
+        s
+    elif IsInfixOperator s || IsPrefixOperator s || IsTernaryOperator s || s = "op_Dynamic"  then
+        s'
     else
         match x with
         | Id(Ident s) | LongId(LongIdent s) -> 
@@ -184,6 +201,16 @@ let rec (|Const|) c =
     // Auto print may cut off the array
     | SynConst.UInt16s us -> sprintf "%A" us
 
+let (|String|_|) e =
+    match e with
+    | SynExpr.Const(SynConst.String(s,_),_) -> Some s
+    | _ -> None
+
+let (|MultilineString|_|) e =
+    match e with
+    | String(s) when (String.isMultiline s) -> Some e
+    | _ -> None
+
 let (|Unresolved|) (Const s as c, r) = (c, r, s)
 
 // File level patterns
@@ -208,7 +235,7 @@ let (|SigModuleOrNamespace|) (SynModuleOrNamespaceSig.SynModuleOrNamespaceSig(Lo
 
 let (|Attribute|) (a : SynAttribute) =
     let (LongIdentWithDots s) = a.TypeName
-    (s, a.ArgExpr, Option.map (|Ident|) a.Target)
+    (s, a.ArgExpr, Option.map (fun (i:Ident) -> i.idText) a.Target)
 
 // Access modifiers
 
@@ -452,8 +479,8 @@ let (|DoBinding|LetBinding|MemberBinding|PropertyBinding|ExplicitCtor|) = functi
         MemberBinding(ats, px, ao, isInline, mf, pat, expr)
     | SynBinding.Binding(_, DoBinding, _, _, ats, px, _, _, _, expr, _, _) -> 
         DoBinding(ats, px, expr)
-    | SynBinding.Binding(ao, _, isInline, isMutable, attrs, px, _, pat, _, expr, _, _) ->
-        LetBinding(attrs, px, ao, isInline, isMutable, pat, expr)
+    | SynBinding.Binding(ao, _, isInline, isMutable, attrs, px, SynValData(_, valInfo, _), pat, _, expr, _, _) ->
+        LetBinding(attrs, px, ao, isInline, isMutable, pat, expr, valInfo)
 
 // Expressions (55 cases, lacking to handle 11 cases)
 
@@ -589,6 +616,8 @@ let (|CompExpr|_|) = function
         Some(isArray, expr)
     | _ -> None
 
+let isCompExpr = function | CompExpr _ -> true | _ -> false
+
 let (|ArrayOrListOfSeqExpr|_|) = function
     | SynExpr.ArrayOrListOfSeqExpr(isArray, expr, _) ->
         Some(isArray, expr)
@@ -693,13 +722,36 @@ let (|TernaryApp|_|) = function
 let (|InfixApps|_|) e =
     let rec loop synExpr = 
         match synExpr with
-        | InfixApp(s, opE, e, e2) -> 
+        | InfixApp(s, opE, e, e2) ->
             let (e1, es) = loop e
-            (e1, (s, opE, e2)::es)
+
+            match es with
+            | [] ->
+                let (t1, ts) = loop e2
+                match ts with
+                | [] ->
+                    (e1, (s, opE, e2)::es)
+                | ts ->
+                    // example code that leads to this:
+                    // let foo =
+                    //     a & b |> c |> d
+                    (e1, ts @ [(s, opE, t1)])
+            | _ ->
+                (e1, (s, opE, e2)::es)
         | e -> (e, [])
     match loop e with
     | (_, []) -> None
     | (e, es) -> Some(e, List.rev es)
+
+let (|AppWithMultilineArgument|_|) e =
+    let isMultilineString p =
+        match p with
+        | MultilineString _ -> true
+        | _ -> false
+
+    match e with
+    | App (_, arguments) when (List.exists isMultilineString arguments) -> Some e
+    | _ -> None
 
 /// Gather all arguments in lambda
 let rec (|Lambda|_|) = function
@@ -743,11 +795,39 @@ let rec (|LetOrUses|_|) = function
         Some(xs', e)
     | _ -> None
 
-let (|LetOrUseBang|_|) = function
-    | SynExpr.LetOrUseBang(_, isUse, _, p, e1, ands, e2, _) ->
-        Some(isUse, p, e1, ands, e2)
-    | _ -> None 
-        
+type ComputationExpressionStatement =
+    | LetOrUseStatement of recursive:bool * isUse:bool * SynBinding
+    | LetOrUseBangStatement of isUse:bool * SynPat * SynExpr * range
+    | AndBangStatement of SynPat * SynExpr
+    | OtherStatement of SynExpr
+
+let rec collectComputationExpressionStatements e : ComputationExpressionStatement list =
+    match e with
+    | SynExpr.LetOrUse(isRecursive, isUse, bindings, body, _) ->
+        let bindings =
+            bindings
+            |> List.map (fun b -> LetOrUseStatement(isRecursive, isUse, b))
+        let returnExpr = collectComputationExpressionStatements body
+        [yield! bindings; yield! returnExpr]
+    | SynExpr.LetOrUseBang(_,isUse,_,pat,expr, andBangs, body, r) ->
+        let letOrUseBang = LetOrUseBangStatement(isUse, pat, expr, r)
+        let andBangs = andBangs |> List.map (fun (_,_,_, ap,ae,_) -> AndBangStatement(ap,ae))
+        let bodyStatements = collectComputationExpressionStatements body
+        [letOrUseBang; yield! andBangs; yield! bodyStatements]
+    | SynExpr.Sequential(_,_, e1,  e2, _) ->
+        [ yield! collectComputationExpressionStatements e1
+          yield! collectComputationExpressionStatements e2 ]
+    | expr -> [ OtherStatement expr ]
+
+/// Matches if the SynExpr has some or of computation expression member call inside.
+let (|CompExprBody|_|) expr =
+    match expr with
+    | SynExpr.LetOrUse(_,_,_, SynExpr.LetOrUseBang(_), _) ->
+        Some expr
+    | SynExpr.LetOrUseBang _ -> Some expr
+    | SynExpr.Sequential(_,_, _, SynExpr.YieldOrReturn(_), _) -> Some expr
+    | _ -> None
+
 let (|ForEach|_|) = function
     | SynExpr.ForEach(_, SeqExprOnly true, _, pat, e1, SingleExpr(Yield, e2) ,_) ->
         Some (pat, e1, e2, true)
@@ -800,8 +880,8 @@ let (|DotSet|_|) = function
     | _ -> None
 
 let (|IfThenElse|_|) = function
-    | SynExpr.IfThenElse(e1, e2, e3, _, _, _, _) ->
-        Some(e1, e2, e3)
+    | SynExpr.IfThenElse(e1, e2, e3, _, _, mIfToThen, _) ->
+        Some(e1, e2, e3, mIfToThen)
     | _ -> None
 
 let rec (|ElIf|_|) = function
@@ -917,17 +997,18 @@ let (|PatTyped|_|) = function
         Some(p, t)
     | _ -> None
 
+// of hier
 let (|PatNamed|_|) = function
-    | SynPat.Named(p, IdentOrKeyword(OpNameFull (s,_)), _, ao, _) ->
+    | SynPat.Named(p, IdentOrKeyword(OpNameFullInPattern (s,_)), _, ao, _) ->
         Some(ao, p, s)
     | _ -> None
 
 let (|PatLongIdent|_|) = function
-    | SynPat.LongIdent(LongIdentWithDots.LongIdentWithDots(LongIdentOrKeyword(OpNameFull (s,_)), _), _, tpso, xs, ao, _) ->
+    | SynPat.LongIdent(LongIdentWithDots.LongIdentWithDots(LongIdentOrKeyword(OpNameFullInPattern (s,_)), _), _, tpso, xs, ao, _) ->
         match xs with
-        | SynConstructorArgs.Pats ps -> 
+        | SynArgPats.Pats ps -> 
             Some(ao, s, List.map (fun p -> (None, p)) ps, tpso)
-        | SynConstructorArgs.NamePatPairs(nps, _) ->
+        | SynArgPats.NamePatPairs(nps, _) ->
             Some(ao, s, List.map (fun (Ident ident, p) -> (Some ident, p)) nps, tpso)
     | _ -> None
 
@@ -1185,6 +1266,9 @@ let (|TAnonRecord|_|) = function
         Some(isStruct, fields)
     | _ -> None
 
+let (|TParen|_|) = function
+    | SynType.Paren(innerType, _) -> Some(innerType)
+    | _ -> None
 // Type parameter
 
 type SingleTyparConstraintKind = 
@@ -1220,8 +1304,8 @@ let (|MSMember|MSInterface|MSInherit|MSValField|MSNestedType|) = function
     | SynMemberSig.ValField(f, _) -> MSValField f
     | SynMemberSig.NestedType(tds, _) -> MSNestedType tds
 
-let (|Val|) (ValSpfn(ats, IdentOrKeyword(OpNameFull (s,_)), tds, t, vi, _, _, px, ao, _, _)) =
-    (ats, px, ao, s, t, vi, tds)
+let (|Val|) (ValSpfn(ats, IdentOrKeyword(OpNameFullInPattern (s,_)), tds, t, vi, isInline, _, px, ao, _, _)) =
+    (ats, px, ao, s, t, vi, isInline, tds)
 
 // Misc
 
@@ -1251,7 +1335,7 @@ let (|FunType|) (t, ValInfo(argTypes, returnType)) =
 /// A rudimentary recognizer for extern functions
 /// Probably we should use lexing information to improve its accuracy
 let (|Extern|_|) = function
-    | Let(LetBinding(ats, px, ao, _, _, PatLongIdent(_, s, [_, PatTuple ps], _), TypedExpr(Typed, _, t))) ->
+    | Let(LetBinding(ats, px, ao, _, _, PatLongIdent(_, s, [_, PatTuple ps], _), TypedExpr(Typed, _, t), _)) ->
         let hasDllImportAttr =
             ats
             |> List.exists (fun { Attributes = attrs } ->
@@ -1289,7 +1373,8 @@ let getRangesFromAttributesFromModuleDeclaration (mdl: SynModuleDecl) =
 
 let getRangesFromAttributesFromSynModuleSigDeclaration (sdl: SynModuleSigDecl) =
     match sdl with
-    | SynModuleSigDecl.NestedModule((SynComponentInfo.ComponentInfo(attrs, _,_,_,_,_,_,_)), _,_,_) ->
+    | SynModuleSigDecl.NestedModule((SynComponentInfo.ComponentInfo(attrs, _,_,_,_,_,_,_)), _,_,_)
+    | SynModuleSigDecl.Types (SynTypeDefnSig.TypeDefnSig(SynComponentInfo.ComponentInfo(attrs, _,_,_,_,_,_,_),_,_,_)::_,_) ->
         collectAttributesRanges attrs
     | _ -> Seq.empty
     |> Seq.toList
@@ -1310,4 +1395,67 @@ let getRangesFromAttributesFromSynMemberDefinition (mdn: SynMemberDefn) =
     match mdn with
     | SynMemberDefn.Member(mb,_) -> getRangesFromAttributesFromSynBinding mb
     | SynMemberDefn.AbstractSlot(valSig, _, _) -> getRangesFromAttributesFromSynValSig valSig
+    | SynMemberDefn.LetBindings(lb::_,_,_,_) -> getRangesFromAttributesFromSynBinding lb
     | _ -> []
+
+let rec (|UppercaseSynExpr|LowercaseSynExpr|) (synExpr:SynExpr) =
+    let upperOrLower (v: string) =
+        let isUpper = Seq.tryHead v |> Option.map (Char.IsUpper) |> Option.defaultValue false
+        if isUpper then UppercaseSynExpr else LowercaseSynExpr
+
+    match synExpr with
+    | SynExpr.Ident(Ident(id)) -> upperOrLower id
+
+    | SynExpr.LongIdent(_, LongIdentWithDots lid, _, _) ->
+        let lastPart = Array.tryLast (lid.Split('.'))
+        match lastPart with
+        | Some lp -> upperOrLower lp
+        | None -> LowercaseSynExpr
+
+    | SynExpr.DotGet (_,_,LongIdentWithDots(lid),_) ->
+        upperOrLower lid
+
+    | SynExpr.DotIndexedGet(expr, _, _,_) ->
+        (|UppercaseSynExpr|LowercaseSynExpr|) expr
+
+    | _ -> failwithf "cannot determine if synExpr %A is uppercase or lowercase" synExpr
+
+let isFunctionBinding (p: SynPat) =
+    match p with
+    | PatLongIdent(_, _, ps, _) when (List.isNotEmpty ps) -> true
+    | _ -> false
+
+let (|ElmishReactWithoutChildren|_|) e =
+    match e with
+    | App(OptVar(ident,_,_), [ArrayOrList(isArray, children, _)])
+    | App(OptVar(ident,_,_), [ArrayOrListOfSeqExpr(isArray, CompExpr(_, Sequentials children))]) ->
+        Some(ident, isArray, children)
+    | _ ->
+        None
+
+let (|ElmishReactWithChildren|_|) e =
+    match e with
+    | App(OptVar(ident), [ArrayOrList(_) as attributes; ArrayOrList(isArray, children, _)]) ->
+        Some(ident, attributes, (isArray, children))
+    | App(OptVar(ident), [ArrayOrListOfSeqExpr(_) as attributes
+                          ArrayOrListOfSeqExpr(isArray, CompExpr(_, Sequentials children))]) ->
+        Some(ident, attributes, (isArray,children))
+    | App(OptVar(ident), [ArrayOrListOfSeqExpr(_) as attributes
+                          ArrayOrListOfSeqExpr(isArray, CompExpr(_, singleChild))])
+    | App(OptVar(ident), [ArrayOrList(_) as attributes
+                          ArrayOrListOfSeqExpr(isArray, CompExpr(_, singleChild))]) ->
+        Some(ident, attributes, (isArray,[singleChild]))
+    | App(OptVar(ident), [ArrayOrListOfSeqExpr(_) as attributes
+                          ArrayOrList(isArray, [], _) ]) ->
+        Some(ident, attributes, (isArray, []))
+
+    | _ ->
+        None
+
+let isIfThenElseWithYieldReturn e =
+    match e with
+    | SynExpr.IfThenElse(_, SynExpr.YieldOrReturn _, None, _ ,_, _,_)
+    | SynExpr.IfThenElse(_, SynExpr.YieldOrReturn _, Some (SynExpr.YieldOrReturn _), _ ,_, _,_)
+    | SynExpr.IfThenElse(_, SynExpr.YieldOrReturnFrom _, None, _ ,_, _,_)
+    | SynExpr.IfThenElse(_, SynExpr.YieldOrReturn _, Some (SynExpr.YieldOrReturnFrom _), _ ,_, _,_) -> true
+    | _ -> false

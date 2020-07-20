@@ -8,7 +8,7 @@ open Fantomas.Tests.TestHelper
 let ``keep comment after arrow`` () =
     formatSourceString false """_Target "FSharpTypesDotNet" (fun _ -> // obsolete
  ())
-"""  ({ config with IndentSpaceNum = 2; PageWidth = 90 })
+"""  ({ config with IndentSize = 2; MaxLineLength = 90 })
     |> prepend newline
     |> should equal """
 _Target "FSharpTypesDotNet" (fun _ -> // obsolete
@@ -65,11 +65,18 @@ open Reactstrap
 let private badgeSample =
     FunctionComponent.Of<obj>
         ((fun _ ->
-            fragment []
-                [ h3 []
-                      [ str "Heading "
-                        Badge.badge [ Badge.Color Secondary ] [ str "New" ] ]
-                  Badge.badge [ Badge.Color Warning ] [ str "oh my" ] ]), "BadgeSample")
+            fragment [] [
+                h3 [] [
+                    str "Heading "
+                    Badge.badge [ Badge.Color Secondary ] [
+                        str "New"
+                    ]
+                ]
+                Badge.badge [ Badge.Color Warning ] [
+                    str "oh my"
+                ]
+            ]),
+         "BadgeSample")
 
 exportDefault badgeSample
 """
@@ -81,7 +88,7 @@ let a =
     b
     |> List.exists (fun p ->
         x && someVeryLongIdentifierrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrzzzz___________)
-"""  ({ config with PageWidth = 80})
+"""  ({ config with MaxLineLength = 80})
     |> prepend newline
     |> should equal """
 let a =
@@ -106,7 +113,11 @@ Target.create "Clean" (fun _ ->
     |> prepend newline
     |> should equal """
 Target.create "Clean" (fun _ ->
-    [ "bin"; "src/Fantomas/bin"; "src/Fantomas/obj"; "src/Fantomas.CoreGlobalTool/bin"; "src/Fantomas.CoreGlobalTool/obj" ]
+    [ "bin"
+      "src/Fantomas/bin"
+      "src/Fantomas/obj"
+      "src/Fantomas.CoreGlobalTool/bin"
+      "src/Fantomas.CoreGlobalTool/obj" ]
     |> List.iter Shell.cleanDir)
 """
 
@@ -169,7 +180,7 @@ let ``short ident in nested let binding`` () =
     foo (fun a ->
                 let b = 8
                 b)
-"""  ({ config with IndentSpaceNum = 2})
+"""  ({ config with IndentSize = 2})
     |> prepend newline
     |> should equal """
 let a =
@@ -212,4 +223,149 @@ let ``add space after chained ident, 676`` () =
     |> prepend newline
     |> should equal """
 let foo = Foo(fun () -> Foo.Create x).Value
+"""
+
+[<Test>]
+let ``line comment after lambda should not necessary make it multiline`` () =
+    formatSourceString false """let a = fun _ -> div [] [] // React.lazy is not compatible with SSR, so just use an empty div
+"""  ({ config with MaxFunctionBindingWidth = 150 })
+    |> prepend newline
+    |> should equal """
+let a = fun _ -> div [] [] // React.lazy is not compatible with SSR, so just use an empty div
+"""
+
+
+[<Test>]
+let ``multiline let binding in lambda`` () =
+    formatSourceString false """
+CloudStorageAccount.SetConfigurationSettingPublisher(fun configName configSettingPublisher ->
+            let connectionString =
+                if hostedService then RoleEnvironment.GetConfigurationSettingValue(configName)
+                else ConfigurationManager.ConnectionStrings.[configName].ConnectionString
+            configSettingPublisher.Invoke(connectionString) |> ignore)
+"""  config
+    |> prepend newline
+    |> should equal """
+CloudStorageAccount.SetConfigurationSettingPublisher(fun configName configSettingPublisher ->
+    let connectionString =
+        if hostedService
+        then RoleEnvironment.GetConfigurationSettingValue(configName)
+        else ConfigurationManager.ConnectionStrings.[configName].ConnectionString
+
+    configSettingPublisher.Invoke(connectionString)
+    |> ignore)
+"""
+
+[<Test>]
+let ``line comment after arrow should not introduce additional newline, 772`` () =
+    formatSourceString false """let genMemberFlagsForMemberBinding astContext (mf: MemberFlags) (rangeOfBindingAndRhs: range) =
+    fun ctx ->
+        match mf with
+        | MFOverride _ ->
+            (fun (ctx: Context) -> // trying to get AST trivia
+
+                ctx.Trivia
+                |> List.tryFind (fun { Type = t; Range = r } -> // trying to get token trivia
+
+                    match t with
+                    | MainNode "SynMemberDefn.Member" -> RangeHelpers.``range contains`` r rangeOfBindingAndRhs
+
+                    | Token { TokenInfo = { TokenName = "MEMBER" } } -> r.StartLine = rangeOfBindingAndRhs.StartLine
+
+                    | _ -> false)
+                |> Option.defaultValue (!- "override ")
+                <| ctx)
+        <| ctx
+"""  config
+    |> prepend newline
+    |> should equal """
+let genMemberFlagsForMemberBinding astContext (mf: MemberFlags) (rangeOfBindingAndRhs: range) =
+    fun ctx ->
+        match mf with
+        | MFOverride _ ->
+            (fun (ctx: Context) -> // trying to get AST trivia
+
+            ctx.Trivia
+            |> List.tryFind (fun { Type = t; Range = r } -> // trying to get token trivia
+
+                match t with
+                | MainNode "SynMemberDefn.Member" -> RangeHelpers.``range contains`` r rangeOfBindingAndRhs
+
+                | Token { TokenInfo = { TokenName = "MEMBER" } } -> r.StartLine = rangeOfBindingAndRhs.StartLine
+
+                | _ -> false)
+            |> Option.defaultValue (!- "override ")
+            <| ctx)
+        <| ctx
+"""
+
+[<Test>]
+let ``line comment after arrow should not introduce extra newline`` () =
+    formatSourceString false """List.tryFind (fun { Type = t; Range = r } -> // foo
+                    let a = 8
+                    a + 9)
+"""  config
+    |> prepend newline
+    |> should equal """
+List.tryFind (fun { Type = t; Range = r } -> // foo
+    let a = 8
+    a + 9)
+"""
+
+[<Test>]
+let ``lambda body should be indented far enough, 870`` () =
+    formatSourceString false """  let projectIntoMap projection =
+    fun state eventEnvelope ->
+      state
+      |> Map.tryFind eventEnvelope.Metadata.Source
+      |> Option.defaultValue projection.Init
+      |> fun projectionState -> eventEnvelope.Event |> projection.Update projectionState
+      |> fun newState -> state |> Map.add eventEnvelope.Metadata.Source newState
+
+let projectIntoMap projection =
+  fun state eventEnvelope ->
+    state
+    |> Map.tryFind eventEnvelope.Metadata.Source
+    |> Option.defaultValue projection.Init
+    |> fun projectionState ->
+         eventEnvelope.Event
+         |> projection.Update projectionState
+    |> fun newState ->
+         state
+         |> Map.add eventEnvelope.Metadata.Source newState
+"""
+        ({ config with
+               IndentSize = 2
+               SpaceBeforeUppercaseInvocation = true
+               SpaceBeforeColon = true
+               SpaceAfterComma = false
+               SpaceAroundDelimiter = false
+               MaxInfixOperatorExpression = 40
+               MaxFunctionBindingWidth = 60
+               MultilineBlockBracketsOnSameColumn = true })
+    |> prepend newline
+    |> should equal """
+let projectIntoMap projection =
+  fun state eventEnvelope ->
+    state
+    |> Map.tryFind eventEnvelope.Metadata.Source
+    |> Option.defaultValue projection.Init
+    |> fun projectionState ->
+         eventEnvelope.Event
+         |> projection.Update projectionState
+    |> fun newState ->
+         state
+         |> Map.add eventEnvelope.Metadata.Source newState
+
+let projectIntoMap projection =
+  fun state eventEnvelope ->
+    state
+    |> Map.tryFind eventEnvelope.Metadata.Source
+    |> Option.defaultValue projection.Init
+    |> fun projectionState ->
+         eventEnvelope.Event
+         |> projection.Update projectionState
+    |> fun newState ->
+         state
+         |> Map.add eventEnvelope.Metadata.Source newState
 """

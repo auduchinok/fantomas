@@ -34,7 +34,8 @@ type uColor =
     | Green = 1u
     | Blue = 2u
 
-let col3 = Microsoft.FSharp.Core.LanguagePrimitives.EnumOfValue<uint32, uColor>(2u)
+let col3 =
+    Microsoft.FSharp.Core.LanguagePrimitives.EnumOfValue<uint32, uColor>(2u)
 """
 
 [<Test>]
@@ -57,9 +58,35 @@ type Type =
     | TyCon of string * Type list
     override this.ToString() =
         match this with
-        | TyLam(t1, t2) -> sprintf "(%s -> %s)" (t1.ToString()) (t2.ToString())
+        | TyLam (t1, t2) -> sprintf "(%s -> %s)" (t1.ToString()) (t2.ToString())
         | TyVar a -> a
-        | TyCon(s, ts) -> s
+        | TyCon (s, ts) -> s
+"""
+
+[<Test>]
+let ``newline between discriminated unions and members``() =
+    formatSourceString false """
+type Type
+    = TyLam of Type * Type
+    | TyVar of string
+    | TyCon of string * Type list
+    with override this.ToString() =
+            match this with
+            | TyLam (t1, t2) -> sprintf "(%s -> %s)" (t1.ToString()) (t2.ToString())
+            | TyVar a -> a
+            | TyCon (s, ts) -> s""" ({ config with NewlineBetweenTypeDefinitionAndMembers = true })
+    |> prepend newline
+    |> should equal """
+type Type =
+    | TyLam of Type * Type
+    | TyVar of string
+    | TyCon of string * Type list
+
+    override this.ToString() =
+        match this with
+        | TyLam (t1, t2) -> sprintf "(%s -> %s)" (t1.ToString()) (t2.ToString())
+        | TyVar a -> a
+        | TyCon (s, ts) -> s
 """
 
 [<Test>]
@@ -141,7 +168,8 @@ type uColor =
     | Green = 1u
     | Blue = 2u
 
-let col3 = Microsoft.FSharp.Core.LanguagePrimitives.EnumOfValue<uint32, uColor>(2u)
+let col3 =
+    Microsoft.FSharp.Core.LanguagePrimitives.EnumOfValue<uint32, uColor>(2u)
 """
 
 [<Test>]
@@ -164,7 +192,7 @@ type CustomerId =
    """ config
    |> prepend newline
    |> should equal """
-type CustomerId = private | CustomerId of int
+type CustomerId = private CustomerId of int
 """
 
 [<Test>]
@@ -174,7 +202,7 @@ type CustomerId =
     | CustomerId of int
     member this.Test() =
         printfn "%A" this
-    """ config
+    """ { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type CustomerId =
@@ -266,9 +294,7 @@ type DU = | Record
 """  config
     |> prepend newline
     |> should equal """
-type Record =
-    { Name: string }
-
+type Record = { Name: string }
 type DU = | Record
 """
 
@@ -280,6 +306,13 @@ let ``single case DU with fields should not have a pipe after formatting`` () =
 type DU = Record of string
 """
 
+[<Test>]
+let ``single case DU with private fields should not have a pipe after formatting`` () =
+    formatSourceString false """type String50 = private String50 of string"""  config
+    |> prepend newline
+    |> should equal """
+type String50 = private String50 of string
+"""
 
 [<Test>]
 let ``single case DU, no UnionCaseFields in signature file`` () =

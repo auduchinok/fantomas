@@ -19,7 +19,7 @@ type NameStruct =
             x.Name.ToLower()
     end
 
-let n = new NameStruct("Hippo")""" config
+let n = new NameStruct("Hippo")""" { config with MaxValueBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type NameStruct =
@@ -78,9 +78,8 @@ match t with
     |> prepend newline
     |> should equal """
 type S = S of struct (int * int)
-
 let g: struct (int * int) = struct (1, 1)
-let z = fun ((S(struct (u, v))): S) -> u + v
+let z = fun ((S (struct (u, v))): S) -> u + v
 let t = struct (1, 2)
 
 match t with

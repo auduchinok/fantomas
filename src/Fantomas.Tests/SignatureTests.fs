@@ -49,7 +49,7 @@ let ``should not add parens in signature``() =
       Handler : Map<string, string> -> HttpListenerContext -> string }
     override x.ToString() = sprintf "%s %s" x.Verb x.Path
 
-    """ config
+    """ { config with MaxFunctionBindingWidth = 120 }
     |> should equal """type Route =
     { Verb: string
       Path: string
@@ -66,7 +66,7 @@ let ``should keep the string * string * string option type signature``() =
     """ config
     |> should equal """type DGML =
     | Node of string
-    | Link of string * string * string option
+    | Link of string * string * (string option)
 """
 
 [<Test>]
@@ -95,7 +95,7 @@ type A () =
 
 type A() =
     interface IA with
-        member x.F(f: unit -> _) = f()
+        member x.F(f: unit -> _) = f ()
 """
 
 [<Test>]
@@ -127,7 +127,7 @@ val GetHashCodeTainted : (Tainted<'T> -> int) when 'T : equality
     |> should equal """
 module Tainted
 
-val GetHashCodeTainted: Tainted<'T> -> int when 'T: equality
+val GetHashCodeTainted: (Tainted<'T> -> int) when 'T: equality
 """
 
 [<Test>]
@@ -477,4 +477,209 @@ type T =
 
 type T with
     member Foo: int
+"""
+
+[<Test>]
+let ``comment above static member, 680`` () =
+    formatSourceString true """
+namespace Fantomas
+
+open Fantomas.FormatConfig
+open Fantomas.SourceOrigin
+open FSharp.Compiler.Ast
+open FSharp.Compiler.Range
+open FSharp.Compiler.SourceCodeServices
+
+[<Sealed>]
+type CodeFormatter =
+    /// Parse a source string using given config
+    static member ParseAsync : fileName:string * source:SourceOrigin * parsingOptions: FSharpParsingOptions * checker:FSharpChecker -> Async<(ParsedInput * string list) array>
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Fantomas
+
+open Fantomas.FormatConfig
+open Fantomas.SourceOrigin
+open FSharp.Compiler.Ast
+open FSharp.Compiler.Range
+open FSharp.Compiler.SourceCodeServices
+
+[<Sealed>]
+type CodeFormatter =
+    /// Parse a source string using given config
+    static member ParseAsync: fileName:string * source:SourceOrigin * parsingOptions:FSharpParsingOptions * checker:FSharpChecker
+         -> Async<(ParsedInput * string list) array>
+"""
+
+[<Test>]
+let ``type restrictions, 797`` () =
+    formatSourceString true """namespace Foo
+
+type internal Foo2 =
+  abstract member Bar<'k> : unit -> unit when 'k : comparison
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Foo
+
+type internal Foo2 =
+    abstract member Bar<'k> : unit -> unit when 'k: comparison
+"""
+
+[<Test>]
+let ``operator with constraint`` () =
+    formatSourceString true """namespace Bar
+    val inline (.+.) : x : ^a Foo -> y : ^b Foo -> ^c Foo when (^a or ^b) : (static member (+) : ^a * ^b -> ^c)
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Bar
+
+val inline (.+.): x : ^a Foo -> y : ^b Foo -> ^c Foo when (^a or ^b): (static member (+): ^a * ^b -> ^c)
+"""
+
+[<Test>]
+let ``preserve abstract keyword`` () =
+    formatSourceString true """namespace Foo
+
+type internal Blah =
+  abstract Baz : unit
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Foo
+
+type internal Blah =
+    abstract Baz: unit
+"""
+
+[<Test>]
+let ``internal keyword before short record type, 830`` () =
+    formatSourceString true """namespace Bar
+type 'a Baz =
+    internal {
+        Value : 'a
+    }
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Bar
+
+type 'a Baz = internal { Value: 'a }
+"""
+
+[<Test>]
+let ``internal keyword before long record type`` () =
+    formatSourceString true """namespace Bar
+
+    type A = internal { ALongIdentifier: string; YetAnotherLongIdentifier: bool }""" config
+    |> prepend newline
+    |> should equal """
+namespace Bar
+
+type A =
+    internal { ALongIdentifier: string
+               YetAnotherLongIdentifier: bool }
+"""
+
+[<Test>]
+let ``multiple constraints on function declaration, 886`` () =
+    formatSourceString true """namespace Blah
+
+module Foo =
+    val inline sum : ('a -> ^value) -> 'a Foo -> ^value
+        when ^value : (static member (+) : ^value * ^value -> ^value) and ^value : (static member Zero : ^value)
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Blah
+
+module Foo =
+    val inline sum: ('a -> ^value) -> 'a Foo -> ^value
+        when ^value: (static member (+): ^value * ^value -> ^value) and ^value: (static member Zero: ^value)
+"""
+
+[<Test>]
+let ``preserve with get property, 945`` () =
+    formatSourceString true """
+namespace B
+type Foo =
+    | Bar of int
+    member Item : unit -> int with get
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+namespace B
+
+type Foo =
+    | Bar of int
+    member Item : unit -> int with get
+"""
+
+[<Test>]
+let ``preserve with set property`` () =
+    formatSourceString true """
+namespace B
+type Foo =
+    member Item : int -> unit with set
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+namespace B
+
+type Foo =
+    member Item : int -> unit with set
+"""
+
+[<Test>]
+let ``preserve with get,set`` () =
+    formatSourceString true """
+namespace B
+
+type Foo =
+    member Item : int with get,  set
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+namespace B
+
+type Foo =
+    member Item : int with get, set
+"""
+
+[<Test>]
+let ``with set after constraint`` () =
+    formatSourceString true """
+namespace B
+
+type Foo =
+    member Item : 't -> unit when 't   :   comparison   with set
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+namespace B
+
+type Foo =
+    member Item : 't -> unit when 't : comparison with set
+"""
+
+[<Test>]
+let ``preserve abstract member in type, 944`` () =
+    formatSourceString true """
+namespace Baz
+
+type Foo =
+    abstract member Bar : Type
+    abstract Bar2 : Type
+    member Bar3 : Type
+"""  { config with SpaceBeforeColon = true }
+    |> prepend newline
+    |> should equal """
+namespace Baz
+
+type Foo =
+    abstract member Bar : Type
+    abstract Bar2 : Type
+    member Bar3 : Type
 """

@@ -16,7 +16,6 @@ array1.[1] <- 3
     |> prepend newline
     |> should equal """
 let array1 = [| 1; 2; 3 |]
-
 array1.[0..2]
 array2.[2.., 0..]
 array2.[..3, ..1]
@@ -117,9 +116,7 @@ let listOfSquares = [ for i in 1 .. 10 -> i*i ]
 let list0to3 = [0 .. 3]""" config
     |> prepend newline
     |> should equal """
-let listOfSquares =
-    [ for i in 1 .. 10 -> i * i ]
-
+let listOfSquares = [ for i in 1 .. 10 -> i * i ]
 let list0to3 = [ 0 .. 3 ]
 """
 
@@ -131,9 +128,7 @@ let a2 = [| 0 .. 99 |]
 let a3 = [| for n in 1 .. 100 do if isPrime n then yield n |]""" config
     |> prepend newline
     |> should equal """
-let a1 =
-    [| for i in 1 .. 10 -> i * i |]
-
+let a1 = [| for i in 1 .. 10 -> i * i |]
 let a2 = [| 0 .. 99 |]
 
 let a3 =
@@ -195,7 +190,7 @@ let ``multiline list of string should not add ;`` () =
     formatSourceString false """
        [ "_Binaries/AltCover/Debug+AnyCPU/AltCover.exe"
          "_Binaries/AltCover.Shadow/Debug+AnyCPU/AltCover.Shadow.dll" ]
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> should equal """[ "_Binaries/AltCover/Debug+AnyCPU/AltCover.exe"
   "_Binaries/AltCover.Shadow/Debug+AnyCPU/AltCover.Shadow.dll" ]
 """
@@ -217,6 +212,7 @@ let prismCli commando =
             [ "component" ==> "pre"
               //"className" ==> "language-fsharp"
              ]
+
     ()
 """
 
@@ -238,6 +234,7 @@ let prismCli commando =
             [|"component" ==> "pre"
               //"className" ==> "language-fsharp"
             |]
+
     ()
 """
 
@@ -1347,7 +1344,8 @@ let ``F# 4.7 implicit yield in sequence`` () =
 seq {
     1
     2
-    3 }
+    3
+}
 """
 
 [<Test>]
@@ -1393,7 +1391,7 @@ let DotNamedIndexedPropertySet () =
 """  config
     |> prepend newline
     |> should equal """
-(foo()).Item(key) <- value
+(foo ()).Item(key) <- value
 """
 
 [<Test>]
@@ -1409,7 +1407,7 @@ let nestedList: obj list = [
         "33333333bbbbbbbbbbbbbbb"
     ]
 ]
-"""  ({ config with PageWidth = 80; KeepNewlineAfter = true })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let nestedList: obj list =
@@ -1436,7 +1434,7 @@ let nestedList: obj list = [|
         "33333333bbbbbbbbbbbbbbb"
     |]
 |]
-"""  ({ config with PageWidth = 80; KeepNewlineAfter = true })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let nestedList: obj list =
@@ -1462,7 +1460,7 @@ let nestedList: obj list = [|
         "33333333bbbbbbbbbbbbbbb"
     |]
 |]
-"""  ({ config with PageWidth = 80; KeepNewlineAfter = true })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let nestedList: obj list =
@@ -1489,7 +1487,7 @@ let nestedList: obj list = [
         // this case looks weird but seen rarely
     ]
 ]
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let nestedList: obj list =
@@ -1517,7 +1515,7 @@ let nestedList: obj list = [|
         // this case looks weird but seen rarely
     |]
 |]
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let nestedList: obj list =
@@ -1540,7 +1538,7 @@ let c = list.[0..^1]  // 1,2,3,4
 let d = list.[^1..]   // 4,5
 let e = list.[^0..]   // 5
 let f = list.[^2..^1] // 3,4
-"""  ({ config with PageWidth = 80 })
+"""  ({ config with MaxLineLength = 80 })
     |> prepend newline
     |> should equal """
 let a = list.[..^0] // 1,2,3,4,5
@@ -1549,4 +1547,57 @@ let c = list.[0..^1] // 1,2,3,4
 let d = list.[^1..] // 4,5
 let e = list.[^0..] // 5
 let f = list.[^2..^1] // 3,4
+"""
+
+[<Test>]
+let ``calling indexed item in list, 798`` () =
+    formatSourceString false """namespace Foo
+
+type T = { A : (unit -> unit) array }
+module F =
+  let f (a : T) =
+    a.A.[0] ()
+"""  config
+    |> prepend newline
+    |> should equal """
+namespace Foo
+
+type T = { A: (unit -> unit) array }
+
+module F =
+    let f (a: T) = a.A.[0]()
+"""
+
+[<Test>]
+let ``list with if/then/else yield expressions should always be multiline, 931`` () =
+    formatSourceString false """
+let original_input = [
+  if true then yield "value1"
+  if false then yield "value2"
+  if true then yield "value3"
+]
+"""  { config with MaxIfThenElseShortWidth = 120; MaxArrayOrListWidth = 120 }
+    |> prepend newline
+    |> should equal """
+let original_input =
+    [ if true then yield "value1"
+      if false then yield "value2"
+      if true then yield "value3" ]
+"""
+
+[<Test>]
+let ``list with if/then/else yield bang expressions should always be multiline`` () =
+    formatSourceString false """
+let value = [
+    if foo then yield! ["a";"b"] else yield "c"
+    if bar then yield "d" else yield! ["e";"f"]
+]
+"""  { config with MaxIfThenElseShortWidth = 120; MaxArrayOrListWidth = 120; MultilineBlockBracketsOnSameColumn = true }
+    |> prepend newline
+    |> should equal """
+let value =
+    [
+        if foo then yield! [ "a"; "b" ] else yield "c"
+        if bar then yield "d" else yield! [ "e"; "f" ]
+    ]
 """

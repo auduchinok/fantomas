@@ -55,7 +55,6 @@ let rangeTest testValue mid size =
     | _ -> printfn "The test value is out of range."
 
 let (var1, var2) as tuple1 = (1, 2)
-
 printfn "%d %d %A" var1 var2 tuple1
 """
 
@@ -117,6 +116,7 @@ let countValues list value =
         | (elem1 & head) :: tail when elem1 = value -> checkList tail (acc + 1)
         | head :: tail -> checkList tail acc
         | [] -> acc
+
     checkList list 0
 
 let detectZeroTuple point =
@@ -152,13 +152,13 @@ let detect1 x =
     | 1 -> printfn "Found a 1!"
     | (var1: int) -> printfn "%d" var1
 
-let RegisterControl(control: Control) =
+let RegisterControl (control: Control) =
     match control with
     | :? Button as button -> button.Text <- "Registered."
     | :? CheckBox as checkbox -> checkbox.Text <- "Registered."
     | _ -> ()
 
-let ReadFromFile(reader: System.IO.StreamReader) =
+let ReadFromFile (reader: System.IO.StreamReader) =
     match reader.ReadLine() with
     | null ->
         printfn "\n"
@@ -179,9 +179,7 @@ let IsMatchByName record1 (name: string) =
     | _ -> false """ config
     |> prepend newline
     |> should equal """
-type MyRecord =
-    { Name: string
-      ID: int }
+type MyRecord = { Name: string; ID: int }
 
 let IsMatchByName record1 (name: string) =
     match record1 with
@@ -196,7 +194,7 @@ try
     fst(find (fun (s, (s', ty): int * int) -> 
                 s' = s0 && can (type_match ty ty0) []) (!the_interface))
 with
-| Failure _ -> s0""" { config with PageWidth = 80 }
+| Failure _ -> s0""" { config with MaxLineLength = 80 }
     |> prepend newline
     |> should equal """
 try
@@ -228,7 +226,8 @@ let UNIFY_ACCEPT_TAC mvs th (asl, w) =
     |> should equal """
 let UNIFY_ACCEPT_TAC mvs th (asl, w) =
     let insts = term_unify mvs (concl th) w
-    ([], insts), [],
+    ([], insts),
+    [],
     let th' = INSTANTIATE insts th
     fun i [] -> INSTANTIATE i th'
 """
@@ -253,7 +252,8 @@ let f x =
     |> prepend newline
     |> should equal """
 let f x =
-    a || // other case
+    a
+    || // other case
     match n with
     | 17 -> false
     | _ -> true
@@ -270,7 +270,7 @@ let x =
     |> should equal """
 let x =
     match y with
-    | Start(-1) -> true
+    | Start (-1) -> true
     | _ -> false
 """
 
@@ -373,18 +373,18 @@ let (|OneLinerBinding|MultilineBinding|) b =
     |> should equal """
 let (|OneLinerBinding|MultilineBinding|) b =
     match b with
-    | LetBinding([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
-    | DoBinding([], PreXmlDoc [||], OneLinerExpr _)
-    | MemberBinding([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
-    | PropertyBinding([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
-    | ExplicitCtor([], PreXmlDoc [||], _, _, OneLinerExpr _, _) -> OneLinerBinding b
+    | LetBinding ([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
+    | DoBinding ([], PreXmlDoc [||], OneLinerExpr _)
+    | MemberBinding ([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
+    | PropertyBinding ([], PreXmlDoc [||], _, _, _, _, OneLinerExpr _)
+    | ExplicitCtor ([], PreXmlDoc [||], _, _, OneLinerExpr _, _) -> OneLinerBinding b
 
     | _ -> MultilineBinding b
 """
 
 [<Test>]
 let ``should split constructor and function call correctly, double formatting`` () =
-    let config80 = { config with PageWidth = 80 }
+    let config80 = { config with MaxLineLength = 80 }
 
     let original = """
 let update msg model =
@@ -404,9 +404,11 @@ let update msg model =
     let res =
         match msg with
         | AMessage ->
-            { model with AFieldWithAVeryVeryVeryLooooooongName = 10 }
+            { model with
+                  AFieldWithAVeryVeryVeryLooooooongName = 10 }
                 .RecalculateTotal()
         | AnotherMessage -> model
+
     res
 """
 
@@ -441,11 +443,11 @@ let internal ImageLoadResilient (f: unit -> 'a) (tidy: unit -> 'a) =
     |> should equal """
 let internal ImageLoadResilient (f: unit -> 'a) (tidy: unit -> 'a) =
     try
-        f()
+        f ()
     with
     | :? BadImageFormatException
     | :? ArgumentException
-    | :? IOException -> tidy()
+    | :? IOException -> tidy ()
 """
 
 [<Test>]
@@ -456,7 +458,7 @@ match x with
     let z = 1
     Some(y + z)
 | None -> None
-"""  { config with IndentSpaceNum = 2 }
+"""  { config with IndentSize = 2 }
     |> prepend newline
     |> should equal """
 match x with
@@ -464,4 +466,30 @@ match x with
     let z = 1
     Some(y + z)
 | None -> None
+"""
+
+[<Test>]
+let ``should preserve a new line between single and multi-pattern cases`` () =
+    formatSourceString false """
+let f x =
+    match x with
+    | A
+
+    | B -> Some()
+
+    | C -> None
+
+    | _ -> None
+"""  config
+    |> prepend newline
+    |> should equal """
+let f x =
+    match x with
+    | A
+
+    | B -> Some()
+
+    | C -> None
+
+    | _ -> None
 """

@@ -4,7 +4,8 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <IsPackable>false</IsPackable>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <Version>3.3.0-beta-002</Version>
+    <Version>4.0.0-beta-001</Version>
+    <NoWarn>FS0988</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Fantomas.CoreGlobalTool\Fantomas.CoreGlobalTool.fsproj" />
@@ -13,6 +14,8 @@
     <None Include="paket.references" />
     <Compile Include="TestHelpers.fs" />
     <Compile Include="CheckTests.fs" />
+    <Compile Include="ByteOrderMarkTests.fs" />
+    <Compile Include="ConfigTests.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

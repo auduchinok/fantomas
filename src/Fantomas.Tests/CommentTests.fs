@@ -38,13 +38,14 @@ let print_30_permut() =
     """ config
     |> prepend newline
     |> should equal """
-let print_30_permut() =
+let print_30_permut () =
 
     /// declare and initialize
     let permutation: int array =
         Array.init n (fun i ->
             Console.Write(i + 1)
             i)
+
     permutation
 """
 
@@ -59,13 +60,14 @@ let print_30_permut() =
     """ config
     |> prepend newline
     |> should equal """
-let print_30_permut() =
+let print_30_permut () =
 
     /// declare and initialize
     let permutation: int array =
         Array.init n (fun (i, j) ->
             Console.Write(i + 1)
             i)
+
     permutation
 """
 
@@ -120,7 +122,7 @@ let f() =
 """  config
     |> prepend newline
     |> should equal """
-let f() =
+let f () =
     // COMMENT
     x + x
 """
@@ -134,7 +136,7 @@ let f() =
 """   config
     |> prepend newline
     |> should equal """
-let f() =
+let f () =
     let x = 1 // COMMENT
     x + x
 """ 
@@ -156,7 +158,7 @@ let f() =
     |> should equal """
 /// XML COMMENT
 // Other comment
-let f() =
+let f () =
     // COMMENT A
     let y = 1
     (* COMMENT B *)
@@ -182,7 +184,7 @@ let f() =
     |> should equal """
 /// XML COMMENT A
 // Other comment
-let f() =
+let f () =
     // COMMENT A
     let y = 1
     /// XML COMMENT B
@@ -380,9 +382,53 @@ let hello() = "hello world"
 """  config
     |> prepend newline
     |> should equal """
-let hello() = "hello world"
+let hello () = "hello world"
 
 (* This is a comment. *)
+"""
+
+[<Test>]
+let ``should handle block comments at the end of file, 810`` () =
+    formatSourceString false """
+printfn "hello world"
+(* This is a comment. *)
+"""  config
+    |> prepend newline
+    |> should equal """
+printfn "hello world"
+(* This is a comment. *)
+"""
+
+[<Test>]
+let ``preserve block comment after record, 516`` () =
+    formatSourceString false """module TriviaModule =
+
+let env = "DEBUG"
+
+type Config = {
+    Name: string
+    Level: int
+}
+
+let meh = { // this comment right
+    Name = "FOO"; Level = 78 }
+
+(* ending with block comment *)
+"""  config
+    |> prepend newline
+    |> should equal """
+module TriviaModule =
+
+    let env = "DEBUG"
+
+    type Config = { Name: string; Level: int }
+
+    let meh =
+        { // this comment right
+          Name = "FOO"
+          Level = 78 }
+
+(* ending with block comment *)
 """
 
 [<Test>]
@@ -435,7 +481,6 @@ type C () =
     |> prepend newline
     |> should equal """
 type C() =
-
     let rec g x = h x
     and h x = g x
 
@@ -588,7 +633,7 @@ type substring =
                 strB.String, strB.Offset,
                 min strA.Length strB.Length)
 #endif
-"""  config
+"""  ({ config with MaxInfixOperatorExpression = 60 })
     |> should equal """(*
 
 Copyright 2010-2012 TidePowerd Ltd.
@@ -661,7 +706,12 @@ type substring =
             // NOTE: we don't have to null check here because System.String.Compare
             // gives reliable results on null values.
             System.String.Compare
-                (strA.String, strA.Offset, strB.String, strB.Offset, min strA.Length strB.Length, false,
+                (strA.String,
+                 strA.Offset,
+                 strB.String,
+                 strB.Offset,
+                 min strA.Length strB.Length,
+                 false,
                  CultureInfo.InvariantCulture)
 #else
             // NOTE: we don't have to null check here because System.String.CompareOrdinal
@@ -745,4 +795,111 @@ let ``comments for enum cases, 572``() =
     | CaseB = 1
     // Comment for CaseC
     | CaseC = 2
+"""
+
+[<Test>]
+let ``comments in multi-pattern case matching should not be removed, 813``() =
+    formatSourceString false """
+let f x =
+    match x with
+    | A // inline comment
+    // line comment
+    | B -> Some()
+    | _ -> None""" config
+    |> prepend newline
+    |> should equal """
+let f x =
+    match x with
+    | A // inline comment
+    // line comment
+    | B -> Some()
+    | _ -> None
+"""
+
+[<Test>]
+let ``block comments in multi-pattern case matching should not be removed``() =
+    formatSourceString false """
+let f x =
+    match x with
+    | A
+    (* multi-line
+       block comment *)
+    | B -> Some()
+    | _ -> None""" config
+    |> prepend newline
+    |> should equal """
+let f x =
+    match x with
+    | A
+    (* multi-line
+       block comment *)
+    | B -> Some()
+    | _ -> None
+"""
+
+[<Test>]
+let ``multiple line comments form a single trivia`` () =
+    formatSourceString false """
+/// Represents a long identifier with possible '.' at end.
+///
+/// Typically dotms.Length = lid.Length-1, but they may be same if (incomplete) code ends in a dot, e.g. "Foo.Bar."
+/// The dots mostly matter for parsing, and are typically ignored by the typechecker, but
+/// if dotms.Length = lid.Length, then the parser must have reported an error, so the typechecker is allowed
+/// more freedom about typechecking these expressions.
+/// LongIdent can be empty list - it is used to denote that name of some AST element is absent (i.e. empty type name in inherit)
+type LongIdentWithDots =
+    | LongIdentWithDots of id: LongIdent * dotms: range list
+"""  config
+    |> prepend newline
+    |> should equal """
+/// Represents a long identifier with possible '.' at end.
+///
+/// Typically dotms.Length = lid.Length-1, but they may be same if (incomplete) code ends in a dot, e.g. "Foo.Bar."
+/// The dots mostly matter for parsing, and are typically ignored by the typechecker, but
+/// if dotms.Length = lid.Length, then the parser must have reported an error, so the typechecker is allowed
+/// more freedom about typechecking these expressions.
+/// LongIdent can be empty list - it is used to denote that name of some AST element is absent (i.e. empty type name in inherit)
+type LongIdentWithDots = LongIdentWithDots of id: LongIdent * dotms: range list
+"""
+
+[<Test>]
+let ``newline between comments should lead to individual comments, 920`` () =
+    formatSourceString false """
+[<AllowNullLiteral>]
+type IExports =
+    abstract DataSet: DataSetStatic
+    abstract DataView: DataViewStatic
+    abstract Graph2d: Graph2dStatic
+    abstract Timeline: TimelineStatic
+    // abstract Timeline: TimelineStaticStatic
+    abstract Network: NetworkStatic
+
+// type [<AllowNullLiteral>] MomentConstructor1 =
+//     [<Emit "$0($1...)">] abstract Invoke: ?inp: MomentInput * ?format: MomentFormatSpecification * ?strict: bool -> Moment
+
+// type [<AllowNullLiteral>] MomentConstructor2 =
+//     [<Emit "$0($1...)">] abstract Invoke: ?inp: MomentInput * ?format: MomentFormatSpecification * ?language: string * ?strict: bool -> Moment
+
+// type MomentConstructor =
+//     U2<MomentConstructor1, MomentConstructor2>
+"""  config
+    |> prepend newline
+    |> should equal """
+[<AllowNullLiteral>]
+type IExports =
+    abstract DataSet: DataSetStatic
+    abstract DataView: DataViewStatic
+    abstract Graph2d: Graph2dStatic
+    abstract Timeline: TimelineStatic
+    // abstract Timeline: TimelineStaticStatic
+    abstract Network: NetworkStatic
+
+// type [<AllowNullLiteral>] MomentConstructor1 =
+//     [<Emit "$0($1...)">] abstract Invoke: ?inp: MomentInput * ?format: MomentFormatSpecification * ?strict: bool -> Moment
+
+// type [<AllowNullLiteral>] MomentConstructor2 =
+//     [<Emit "$0($1...)">] abstract Invoke: ?inp: MomentInput * ?format: MomentFormatSpecification * ?language: string * ?strict: bool -> Moment
+
+// type MomentConstructor =
+//     U2<MomentConstructor1, MomentConstructor2>
 """

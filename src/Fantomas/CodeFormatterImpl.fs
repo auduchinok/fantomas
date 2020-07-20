@@ -5,9 +5,9 @@ open System
 open System.Diagnostics
 open System.Text.RegularExpressions
 
-open FSharp.Compiler.Ast
 open FSharp.Compiler.Range
 open FSharp.Compiler.SourceCodeServices
+open FSharp.Compiler.SyntaxTree
 
 open FSharp.Compiler.Text
 open Fantomas
@@ -351,9 +351,9 @@ let isValidAST ast =
         | SynPat.FromParseError _ -> false
 
     and validateConstructorArgs = function
-        | SynConstructorArgs.Pats pats ->
+        | SynArgPats.Pats pats ->
             List.forall validatePattern pats
-        | SynConstructorArgs.NamePatPairs(identPats, _range) ->
+        | SynArgPats.NamePatPairs(identPats, _range) ->
             List.forall (snd >> validatePattern) identPats
 
     match ast with
@@ -388,7 +388,7 @@ let formatWith ast defines formatContext config =
     let sourceCode = defaultArg input String.Empty
     let normalizedSourceCode = String.normalizeNewLine sourceCode
     let formattedSourceCode =
-        let context = Fantomas.Context.Context.create config defines normalizedSourceCode (Some ast)
+        let context = Fantomas.Context.Context.Create config defines normalizedSourceCode (Some ast)
         context |> genParsedInput { ASTContext.Default with TopLevelModuleName = moduleName } ast
         |> Dbg.tee (fun ctx -> printfn "%A" ctx.WriterEvents)
         |> Context.dump
@@ -410,7 +410,7 @@ let format (checker: FSharpChecker) (parsingOptions: FSharpParsingOptions) confi
             |> Array.map (fun (ast', defines) ->
                 formatWith ast' defines formatContext config)
             |> List.ofArray
-            
+
         let merged =
             match results with
             | [] -> failwith "not possible"
@@ -575,7 +575,7 @@ let private formatRange (checker: FSharpChecker) (parsingOptions: FSharpParsingO
     let reconstructSourceCode startCol formatteds pre post =
         Debug.WriteLine("Formatted parts: '{0}' at column {1}", sprintf "%A" formatteds, startCol)
         // Realign results on the correct column
-        Context.Context.create config [] String.Empty None
+        Context.Context.Create config [] String.Empty None
         // Mono version of indent text writer behaves differently from .NET one,
         // So we add an empty string first to regularize it
         |> if returnFormattedContentOnly then Context.str String.Empty else Context.str pre
@@ -673,34 +673,14 @@ type internal BlockType =
 /// Make a position at (line, col) to denote cursor position
 let makePos line col = mkPos line col
 
-let readConfiguration fileOrFolder =
-    try
-        let configurationFiles =
-            ConfigFile.findConfigurationFiles fileOrFolder
+let private editorConfigParser = Fantomas.EditorConfig.Core.EditorConfigParser()
 
-        if List.isEmpty configurationFiles then failwithf "No configuration files were found for %s" fileOrFolder
+let tryReadConfiguration (fsharpFile:string) : FormatConfig option =
+    let editorConfigSettings: Fantomas.EditorConfig.Core.FileConfiguration = editorConfigParser.Parse(fileName = fsharpFile)
+    if editorConfigSettings.Properties.Count = 0 then
+        None
+    else
+        Some <| EditorConfig.parseOptionsFromEditorConfig editorConfigSettings
 
-        let (config,warnings) =
-            List.fold (fun (currentConfig, warnings) configPath ->
-                let configContent = System.IO.File.ReadAllText(configPath)
-                let options, warningFromConfigPath =
-                    match System.IO.Path.GetFileName(configPath) with
-                    | json when (json = ConfigFile.jsonConfigFileName) ->
-                        JsonConfig.parseOptionsFromJson configContent
-                    | editorconfig when (editorconfig = ConfigFile.editorConfigFileName) ->
-                        EditorConfig.parseOptionsFromEditorConfig configContent
-                    | _ ->
-                        failwithf "Filename is not supported!"
-                let updatedConfig = FormatConfig.applyOptions(currentConfig, options)
-                let locationAwareWarnings =
-                    List.ofArray warningFromConfigPath
-                    |> List.map (ConfigFile.makeWarningLocationAware configPath)
-
-                (updatedConfig, warnings @ locationAwareWarnings)
-            ) (FormatConfig.Default, []) configurationFiles
-
-        match warnings with
-        | [] -> FormatConfigFileParseResult.Success config
-        | w -> FormatConfigFileParseResult.PartialSuccess (config, w)
-    with
-    | exn -> FormatConfigFileParseResult.Failure exn
+let readConfiguration (fsharpFile:string) : FormatConfig =
+    tryReadConfiguration fsharpFile |> Option.defaultValue FormatConfig.Default

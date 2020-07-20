@@ -128,3 +128,32 @@ module Runner =
         class
         end
 """
+
+[<Test>]
+let ``array literals of BigInteger, 682`` () =
+    formatSourceString false "let input = [| 1I;0I;-1I |]"  config
+    |> should equal "let input = [| 1I; 0I; -1I |]
+"
+
+[<Test>]
+let ``negative single floating-point number, 785`` () =
+    formatSourceString false "let num = -3.213f"  config
+    |> should equal "let num = -3.213f
+"
+
+[<Test>]
+let ``string content ends at string token, 646`` () =
+    formatSourceString false """"Yarn" ==> "Format"
+
+"Yarn" ==> "CheckCodeFormat"
+
+Target.runOrDefault "CheckCodeFormat"
+"""  config
+    |> prepend newline
+    |> should equal """
+"Yarn" ==> "Format"
+
+"Yarn" ==> "CheckCodeFormat"
+
+Target.runOrDefault "CheckCodeFormat"
+"""

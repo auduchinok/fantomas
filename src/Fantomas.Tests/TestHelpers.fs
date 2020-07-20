@@ -4,9 +4,10 @@ open FsUnit
 open System
 open Fantomas.FormatConfig
 open Fantomas
-open FSharp.Compiler.SourceCodeServices
-open FSharp.Compiler.Ast
 open FSharp.Compiler.Range
+open FSharp.Compiler.SourceCodeServices
+open FSharp.Compiler.SyntaxTree
+open FSharp.Compiler.XmlDoc
 open NUnit.Framework
 open FsCheck
 open System.IO
@@ -99,7 +100,7 @@ let printAST isFsiFile sourceCode =
 let printContext sourceCode =
     let normalizedSourceCode = Fantomas.String.normalizeNewLine sourceCode
     let defines = Fantomas.TokenParser.getDefines sourceCode
-    let context = Fantomas.Context.Context.create config defines normalizedSourceCode None
+    let context = Fantomas.Context.Context.Create config defines normalizedSourceCode None
     printfn "context: %A" context
 
 let zero = range.Zero   
@@ -139,7 +140,7 @@ let fromSynExpr expr =
                 QualifiedNameOfFile ident, [], [],
                 [SynModuleOrNamespace
                    ([ident], false, AnonModule,
-                    [SynModuleDecl.DoExpr(NoSequencePointAtDoBinding, expr, zero)], PreXmlDocEmpty, [], None,
+                    [SynModuleDecl.DoExpr(NoDebugPointAtDoBinding, expr, zero)], PreXmlDocEmpty, [], None,
                     zero)], (true, true)))
     Input (tryFormatAST ast None formatConfig)
 
@@ -177,7 +178,7 @@ type NUnitRunner () =
                 Runner.onFinishedToString name result
                 |> Assert.Inconclusive
 
-            | TestResult.False (_,_,_,_,_) ->
+            | TestResult.False _ ->
                 // TODO : Log more information about the test failure.
                 Runner.onFinishedToString name result
                 |> Assert.Fail

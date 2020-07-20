@@ -92,7 +92,7 @@ type Shape2D(x0 : float, y0 : float) =
 
     abstract member Rotate: float -> unit
     default this.Rotate(angle) = rotAngle <- rotAngle + angle
-    """ config
+    """ { config with MaxValueBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 [<AbstractClass>]
@@ -157,7 +157,7 @@ type DerivedClass =
     inherit BaseClass
     val string2 : string
     new (str1, str2) = { inherit BaseClass(str1); string2 = str2 }
-    new (str2) = { inherit BaseClass(); string2 = str2 }""" config
+    new (str2) = { inherit BaseClass(); string2 = str2 }""" ({ config with MaxRecordWidth = 45 })
     |> prepend newline
     |> should equal """
 type BaseClass =
@@ -181,7 +181,7 @@ let ``classes and implicit constructors``() =
        let data = dataIn
        do self.PrintMessage()
        member this.PrintMessage() =
-           printf "Creating MyClass2 with Data %d" data""" config
+           printf "Creating MyClass2 with Data %d" data""" { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type MyClass2(dataIn) as self =
@@ -197,7 +197,7 @@ let ``classes and private implicit constructors``() =
        let data = dataIn
        do self.PrintMessage()
        member this.PrintMessage() =
-           printf "Creating MyClass2 with Data %d" data""" config
+           printf "Creating MyClass2 with Data %d" data""" { config with MaxFunctionBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type MyClass2 private (dataIn) as self =
@@ -216,7 +216,7 @@ type Folder(pathIn: string) =
 
 and File(filename: string, containingFolder: Folder) = 
    member __.Name = filename
-   member __.ContainingFolder = containingFolder""" config
+   member __.ContainingFolder = containingFolder""" { config with MaxValueBindingWidth = 120 }
     |> prepend newline
     |> should equal """
 type Folder(pathIn: string) =
@@ -243,12 +243,14 @@ type MyClassDerived2(y: int) =
     |> should equal """
 type MyClassBase2(x: int) =
     let mutable z = x * x
+
     do
         for i in 1 .. z do
             printf "%d " i
 
 type MyClassDerived2(y: int) =
     inherit MyClassBase2(y * 2)
+
     do
         for i in 1 .. y do
             printf "%d " i
@@ -278,7 +280,8 @@ let ``should keep parens in class inheritance in the right place``() =
     class
         inherit DGMLClass()
 
-        let functions = System.Collections.Generic.Dictionary<string, IState>()
+        let functions =
+            System.Collections.Generic.Dictionary<string, IState>()
     end
 """
 
@@ -311,11 +314,16 @@ let ``member properties with type annotation``() =
     formatSourceString false """type A() =
     member this.X with get():int = 1
     member this.Y with get():int = 1 and set (_:int):unit = ()
+    member this.Z with set (_:int):unit = () and get():int = 1
 """  config
     |> should equal """type A() =
     member this.X: int = 1
 
     member this.Y
+        with get (): int = 1
+        and set (_: int): unit = ()
+
+    member this.Z
         with get (): int = 1
         and set (_: int): unit = ()
 """
@@ -367,8 +375,8 @@ let longNamedClasslongNamedClasslongNamedClasslongNamedClasslongNamedClasslongNa
 System.String.Concat
     ("a",
      "b"
-     + (longNamedFunlongNamedFunlongNamedFunlongNamedFunlongNamedFun
-         (longNamedClasslongNamedClasslongNamedClasslongNamedClasslongNamedClasslongNamedClass)).Property)
+     + longNamedFunlongNamedFunlongNamedFunlongNamedFunlongNamedFun
+         (longNamedClasslongNamedClasslongNamedClasslongNamedClasslongNamedClasslongNamedClass).Property)
 """
 
 [<Test>]
@@ -377,7 +385,7 @@ let ``indexed get long line``() =
 type Exception with
     member inline __.FirstLine = 
         __.Message.Split([|Environment.NewLine|], StringSplitOptions.RemoveEmptyEntries).[0]
-"""  config
+"""  { config with MaxValueBindingWidth = 120 }
     |> should equal """open System
 
 type Exception with
@@ -385,8 +393,8 @@ type Exception with
 """
 
 [<Test>]
-let ``no extra new lines between interface members, 569``() =
-    shouldNotChangeAfterFormat """
+let ``no extra new lines between interface members, 569`` () =
+    formatSourceString false """
 namespace Quartz.Fsharp
 
 module Logging =
@@ -410,9 +418,46 @@ module Logging =
 
     let SetQuartzLoggingFunction f =
         let loggerFunction level (func: Func<string>) exc parameters =
-            let wrappedFunction = Helpers.nullValuesToOptions (fun (x: Func<string>) -> (fun () -> x.Invoke())) func
+            let wrappedFunction =
+                Helpers.nullValuesToOptions (fun (x: Func<string>) -> (fun () -> x.Invoke())) func
             let wrappedException = Helpers.nullValuesToOptions id exc
             f level wrappedFunction wrappedException (parameters |> List.ofArray)
+
+        LogProvider.SetCurrentLogProvider(QuartzLoggerWrapper(loggerFunction))
+
+    let SetQuartzLogger l = LogProvider.SetCurrentLogProvider(l)
+"""  { config with MaxFunctionBindingWidth = 80 }
+    |> prepend newline
+    |> should equal """
+namespace Quartz.Fsharp
+
+module Logging =
+    open Quartz.Logging
+    open System
+
+    //todo: it seems that quartz doesn't use mapped and nested context,
+    //however, check if this is the best implementation for this interface
+    type private QuartzLoggerWrapper(f) =
+        interface ILogProvider with
+
+            member this.OpenMappedContext(_, _) =
+                { new IDisposable with
+                    member this.Dispose() = () }
+
+            member this.OpenNestedContext _ =
+                { new IDisposable with
+                    member this.Dispose() = () }
+
+            member this.GetLogger _name = new Logger(f)
+
+    let SetQuartzLoggingFunction f =
+        let loggerFunction level (func: Func<string>) exc parameters =
+            let wrappedFunction =
+                Helpers.nullValuesToOptions (fun (x: Func<string>) -> (fun () -> x.Invoke())) func
+
+            let wrappedException = Helpers.nullValuesToOptions id exc
+            f level wrappedFunction wrappedException (parameters |> List.ofArray)
+
         LogProvider.SetCurrentLogProvider(QuartzLoggerWrapper(loggerFunction))
 
     let SetQuartzLogger l = LogProvider.SetCurrentLogProvider(l)
@@ -420,14 +465,21 @@ module Logging =
 
 [<Test>]
 let ``no extra new lines between type members, 569``() =
-    shouldNotChangeAfterFormat """
+    formatSourceString false """
 type A() =
 
-    member this.MemberA =
-        if true then 0 else 1
+    member this.MemberA = if true then 0 else 1
 
-    member this.MemberB =
-        if true then 2 else 3
+    member this.MemberB = if true then 2 else 3
+
+    member this.MemberC = 0""" { config with MaxValueBindingWidth = 120 }
+    |> prepend newline
+    |> should equal """
+type A() =
+
+    member this.MemberA = if true then 0 else 1
+
+    member this.MemberB = if true then 2 else 3
 
     member this.MemberC = 0
 """
@@ -464,4 +516,37 @@ type A =
 
     [<Emit("b")>]
     abstract b: Unit -> string
+"""
+
+[<Test>]
+let ``string parameter to inherited class, 720`` () =
+    formatSourceString false """type Child() =
+  inherit Parent ""
+"""  config
+    |> prepend newline
+    |> should equal """
+type Child() =
+    inherit Parent ""
+"""
+
+[<Test>]
+let ``float parameter to inherited class`` () =
+    formatSourceString false """type Child() =
+  inherit Parent 7.9
+"""  config
+    |> prepend newline
+    |> should equal """
+type Child() =
+    inherit Parent 7.9
+"""
+
+[<Test>]
+let ``unit parameter to inherited class`` () =
+    formatSourceString false """type Child() =
+  inherit Parent ()
+"""  config
+    |> prepend newline
+    |> should equal """
+type Child() =
+    inherit Parent()
 """
