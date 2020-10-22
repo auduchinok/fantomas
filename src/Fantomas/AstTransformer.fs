@@ -123,10 +123,10 @@ module private Ast =
               Properties = p []
               FsAstNode = ast
               Childs = [ visitSynExceptionDefn exceptionDef ] }
-        | SynModuleDecl.Open (longDotId, range) ->
+        | SynModuleDecl.Open (SynOpenDeclTarget.ModuleOrNamespace(s, _), range) -> // todo: types
             { Type = SynModuleDecl_Open
               Range = r range
-              Properties = p [ "longIdent" ==> lid longDotId ]
+              Properties = p [ "longIdent" ==> s ]
               FsAstNode = ast
               Childs = [] }
         | SynModuleDecl.Attributes (attrs, range) ->
@@ -147,6 +147,7 @@ module private Ast =
               Properties = p []
               FsAstNode = ast
               Childs = [ visitSynModuleOrNamespace moduleOrNamespace ] }
+        | _ -> failwith "todo" // todo: open types
 
     and visitSynExpr (synExpr: SynExpr): Node =
         match synExpr with
@@ -269,7 +270,7 @@ module private Ast =
                       "isNotNakedRefCell" ==> isNotNakedRefCell ]
               FsAstNode = synExpr
               Childs = [ yield visitSynExpr expr ] }
-        | SynExpr.Lambda (fromMethod, inLambdaSeq, args, body, range) ->
+        | SynExpr.Lambda (fromMethod, inLambdaSeq, args, body, _, range) ->
             { Type = SynExpr_Lambda
               Range = r range
               Properties =
@@ -832,10 +833,10 @@ module private Ast =
 
     and visitSynMemberDefn (mbrDef: SynMemberDefn): Node =
         match mbrDef with
-        | SynMemberDefn.Open (longIdent, range) ->
+        | SynMemberDefn.Open (SynOpenDeclTarget.ModuleOrNamespace(s, _), range) -> // todo: types
             { Type = SynMemberDefn_Open
               Range = r range
-              Properties = p [ "longIdent" ==> li longIdent ]
+              Properties = p [ "longIdent" ==> li s ]
               FsAstNode = mbrDef
               Childs = [] }
         | SynMemberDefn.Member (memberDefn, range) ->
@@ -844,7 +845,7 @@ module private Ast =
               Properties = p []
               FsAstNode = mbrDef
               Childs = [ yield visitSynBinding memberDefn ] }
-        | SynMemberDefn.ImplicitCtor (access, attrs, ctorArgs, selfIdentifier, range) ->
+        | SynMemberDefn.ImplicitCtor (access, attrs, ctorArgs, selfIdentifier, _, range) ->
             { Type = SynMemberDefn_ImplicitCtor
               Range = r range
               Properties =
@@ -935,6 +936,7 @@ module private Ast =
                   [ yield! (visitSynAttributeLists range attrs)
                     if typeOpt.IsSome then yield visitSynType typeOpt.Value
                     yield visitSynExpr synExpr ] }
+        | _ -> failwith "todo" // todo: open types
 
     and visitSynSimplePat (sp: SynSimplePat): Node =
         match sp with
@@ -1765,10 +1767,10 @@ module private Ast =
               Properties = p []
               FsAstNode = ast
               Childs = typeDefs |> List.map visitSynTypeDefnSig }
-        | SynModuleSigDecl.Open (longId, range) ->
+        | SynModuleSigDecl.Open (SynOpenDeclTarget.ModuleOrNamespace(s, _), range) -> // todo: types
             { Type = SynModuleSigDecl_Open
               Range = r range
-              Properties = p [ "longIdent" ==> li longId ]
+              Properties = p [ "longIdent" ==> li s ]
               FsAstNode = ast
               Childs = [] }
         | SynModuleSigDecl.HashDirective (hash, range) ->
@@ -1789,6 +1791,7 @@ module private Ast =
               Properties = p []
               FsAstNode = ast
               Childs = [ visitSynExceptionSig synExceptionSig ] }
+        | _ -> failwith "todo" // todo: open types
 
     and visitSynExceptionSig (exceptionDef: SynExceptionSig): Node =
         match exceptionDef with

@@ -295,13 +295,12 @@ let (|Access|) =
     | SynAccess.Private -> "private"
 
 let (|PreXmlDoc|) (px: PreXmlDoc) =
-    match px.ToXmlDoc() with
-    | XmlDoc lines -> lines
+    px.ToXmlDoc(false, None).UnprocessedLines
 
 // Module declarations (10 cases)
 let (|Open|_|) =
     function
-    | SynModuleDecl.Open (LongIdentWithDots s, _) -> Some s
+    | SynModuleDecl.Open (SynOpenDeclTarget.ModuleOrNamespace(LongIdent s, _), _) -> Some s // todo: types
     | _ -> None
 
 let (|ModuleAbbrev|_|) =
@@ -362,7 +361,7 @@ let (|Exception|_|) =
 
 let (|SigOpen|_|) =
     function
-    | SynModuleSigDecl.Open (LongIdent s, _) -> Some s
+    | SynModuleSigDecl.Open (SynOpenDeclTarget.ModuleOrNamespace(LongIdent s, _), _) -> Some s // todo: types
     | _ -> None
 
 let (|SigModuleAbbrev|_|) =
@@ -448,7 +447,7 @@ let (|MDNestedType|_|) =
 
 let (|MDOpen|_|) =
     function
-    | SynMemberDefn.Open (LongIdent s, _) -> Some s
+    | SynMemberDefn.Open (SynOpenDeclTarget.ModuleOrNamespace(LongIdent s, _), _) -> Some s // todo: types
     | _ -> None
 
 let (|MDImplicitInherit|_|) =
@@ -468,7 +467,7 @@ let (|MDValField|_|) =
 
 let (|MDImplicitCtor|_|) =
     function
-    | SynMemberDefn.ImplicitCtor (ao, ats, ps, ido, _) -> Some(ats, ao, ps, Option.map (|Ident|) ido)
+    | SynMemberDefn.ImplicitCtor (ao, ats, ps, ido, _, _) -> Some(ats, ao, ps, Option.map (|Ident|) ido)
     | _ -> None
 
 let (|MDMember|_|) =
@@ -852,8 +851,8 @@ let (|AppWithMultilineArgument|_|) e =
 /// Gather all arguments in lambda
 let rec (|Lambda|_|) =
     function
-    | SynExpr.Lambda (_, _, pats, Lambda (e, patss), _) -> Some(e, pats :: patss)
-    | SynExpr.Lambda (_, _, pats, e, _) -> Some(e, [ pats ])
+    | SynExpr.Lambda (_, _, pats, Lambda (e, patss), _, _) -> Some(e, pats :: patss)
+    | SynExpr.Lambda (_, _, pats, e, _, _) -> Some(e, [ pats ])
     | _ -> None
 
 let (|MatchLambda|_|) =
