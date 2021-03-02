@@ -1,6 +1,6 @@
 module internal Fantomas.SourceTransformer
 
-open FSharp.Compiler.SyntaxTree
+open FSharp.Compiler.Syntax
 open Fantomas.Context
 open Fantomas.SourceParser
 open Fantomas.TriviaTypes
@@ -311,8 +311,8 @@ let synModuleSigDeclToFsAstType =
     | SynModuleSigDecl.NamespaceFragment _ -> SynModuleSigDecl_NamespaceFragment
     | SynModuleSigDecl.ModuleAbbrev _ -> SynModuleSigDecl_ModuleAbbrev
 
-let synBindingToFsAstType (Binding (_, kind, _, _, _, _, _, _, _, _, _, _)) =
+let synBindingToFsAstType (SynBinding (_, kind, _, _, _, _, _, _, _, _, _, _)) =
     match kind with
     | SynBindingKind.StandaloneExpression -> StandaloneExpression_
-    | SynBindingKind.NormalBinding -> NormalBinding_
-    | SynBindingKind.DoBinding -> DoBinding_
+    | SynBindingKind.Normal -> NormalBinding_
+    | SynBindingKind.Do -> DoBinding_

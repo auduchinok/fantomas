@@ -1,7 +1,7 @@
 module Fantomas.AstTransformer
 
+open FSharp.Compiler.Syntax
 open FSharp.Compiler.Text
-open FSharp.Compiler.SyntaxTree
 open Fantomas.TriviaTypes
 
 let rec (|Sequentials|_|) =
@@ -671,7 +671,7 @@ module private Ast =
               Properties = p []
               FsAstNode = synExpr
               Childs = [ yield visitSynExpr expr ] }
-        | SynExpr.InterpolatedString (parts, range) ->
+        | SynExpr.InterpolatedString (parts, _, range) ->
             { Type = SynExpr_InterpolatedString
               Range = r range
               Properties = p []
@@ -770,7 +770,7 @@ module private Ast =
 
     and visitSynMatchClause (mc: SynMatchClause) : Node =
         match mc with
-        | SynMatchClause.Clause (pat, e1, e2, _range, _) ->
+        | SynMatchClause.SynMatchClause (pat, e1, e2, _range, _) ->
             { Type = SynMatchClause_Clause
               Range = r mc.Range // _range is the same range as pat, see https://github.com/dotnet/fsharp/issues/10877
               Properties = p []
@@ -792,7 +792,7 @@ module private Ast =
 
     and visitSynInterfaceImpl (ii: SynInterfaceImpl) : Node =
         match ii with
-        | InterfaceImpl (typ, bindings, range) ->
+        | SynInterfaceImpl (typ, bindings, range) ->
             { Type = InterfaceImpl_
               Range = r range
               Properties = p []
@@ -803,7 +803,7 @@ module private Ast =
 
     and visitSynTypeDefn (td: SynTypeDefn) =
         match td with
-        | TypeDefn (sci, stdr, members, range) ->
+        | SynTypeDefn (sci, stdr, members, _, range) ->
             { Type = TypeDefn_
               Range = r range
               Properties = p []
@@ -815,7 +815,7 @@ module private Ast =
 
     and visitSynTypeDefnSig (typeDefSig: SynTypeDefnSig) : Node =
         match typeDefSig with
-        | TypeDefnSig (sci, synTypeDefnSigReprs, memberSig, range) ->
+        | SynTypeDefnSig (sci, synTypeDefnSigReprs, memberSig, range) ->
             { Type = TypeDefnSig_
               Range = r range
               Properties = p []
@@ -1014,15 +1014,15 @@ module private Ast =
 
     and visitSynBinding (binding: SynBinding) : Node =
         match binding with
-        | Binding (access, kind, mustInline, isMutable, attrs, _, valData, headPat, returnInfo, expr, range, _) ->
+        | SynBinding (access, kind, mustInline, isMutable, attrs, _, valData, headPat, returnInfo, expr, range, _) ->
             let t =
                 match kind with
                 | SynBindingKind.StandaloneExpression -> StandaloneExpression_
-                | SynBindingKind.NormalBinding -> NormalBinding_
-                | SynBindingKind.DoBinding -> DoBinding_
+                | SynBindingKind.Normal -> NormalBinding_
+                | SynBindingKind.Do -> DoBinding_
 
             { Type = t
-              Range = r binding.RangeOfBindingAndRhs
+              Range = r binding.RangeOfBindingWithRhs
               Properties =
                   p [ yield "mustInline" ==> mustInline
                       yield "isMutable" ==> isMutable
@@ -1051,7 +1051,7 @@ module private Ast =
 
     and visitSynValSig (svs: SynValSig) : Node =
         match svs with
-        | ValSpfn (attrs, ident, explicitValDecls, synType, arity, isInline, isMutable, _, access, expr, range) ->
+        | SynValSig (attrs, ident, explicitValDecls, synType, arity, isInline, isMutable, _, access, expr, range) ->
             { Type = ValSpfn_
               Range = r range
               Properties =
@@ -1080,7 +1080,7 @@ module private Ast =
 
     and visitSynTyparDecl (std: SynTyparDecl) : Node =
         match std with
-        | TyparDecl (attrs, typar) ->
+        | SynTyparDecl (attrs, typar) ->
             { Type = TyparDecl_
               Range = noRange
               Properties = p []
@@ -1091,7 +1091,7 @@ module private Ast =
 
     and visitSynTypar (typar: SynTypar) : Node =
         match typar with
-        | Typar (ident, staticReq, isComGen) ->
+        | SynTypar (ident, staticReq, isComGen) ->
             { Type = Typar_
               Range = noRange
               Properties =
@@ -1103,8 +1103,8 @@ module private Ast =
 
     and visitTyparStaticReq (tsr: TyparStaticReq) =
         match tsr with
-        | NoStaticReq -> "NoStaticReq"
-        | HeadTypeStaticReq -> "HeadTypeStaticReq"
+        | TyparStaticReq.None -> "NoStaticReq"
+        | TyparStaticReq.HeadType -> "HeadTypeStaticReq"
 
     and visitSynBindingReturnInfo (returnInfo: SynBindingReturnInfo) : Node =
         match returnInfo with
@@ -1260,13 +1260,13 @@ module private Ast =
 
     and visitSynConstructorArgs (ctorArgs: SynArgPats) : Node =
         match ctorArgs with
-        | Pats (pats) ->
+        | SynArgPats.Pats (pats) ->
             { Type = Pats_
               Range = noRange
               Properties = p []
               FsAstNode = ctorArgs
               Childs = [ yield! pats |> List.map visitSynPat ] }
-        | NamePatPairs (pats, range) ->
+        | SynArgPats.NamePatPairs (pats, range) ->
             { Type = NamePatPairs_
               Range = r range
               Properties = p []
@@ -1275,7 +1275,7 @@ module private Ast =
 
     and visitSynComponentInfo (sci: SynComponentInfo) : Node =
         match sci with
-        | ComponentInfo (attribs, typeParams, _, longId, _, preferPostfix, access, range) ->
+        | SynComponentInfo (attribs, typeParams, _, longId, _, preferPostfix, access, range) ->
             { Type = ComponentInfo_
               Range = r range
               Properties =
@@ -1313,67 +1313,67 @@ module private Ast =
 
     and visitSynTypeDefnKind (kind: SynTypeDefnKind) =
         match kind with
-        | TyconUnspecified ->
+        | SynTypeDefnKind.Unspecified ->
             { Type = SynTypeDefnKind_TyconUnspecified
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconClass ->
+        | SynTypeDefnKind.Class ->
             { Type = SynTypeDefnKind_TyconClass
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconInterface ->
+        | SynTypeDefnKind.Interface ->
             { Type = SynTypeDefnKind_TyconInterface
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconStruct ->
+        | SynTypeDefnKind.Struct ->
             { Type = SynTypeDefnKind_TyconStruct
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconRecord ->
+        | SynTypeDefnKind.Record ->
             { Type = SynTypeDefnKind_TyconRecord
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconUnion ->
+        | SynTypeDefnKind.Union ->
             { Type = SynTypeDefnKind_TyconUnion
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconAbbrev ->
+        | SynTypeDefnKind.Abbrev ->
             { Type = SynTypeDefnKind_TyconAbbrev
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconHiddenRepr ->
+        | SynTypeDefnKind.Opaque ->
             { Type = SynTypeDefnKind_TyconHiddenRepr
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconAugmentation ->
+        | SynTypeDefnKind.Augmentation ->
             { Type = SynTypeDefnKind_TyconAugmentation
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconILAssemblyCode ->
+        | SynTypeDefnKind.IL ->
             { Type = SynTypeDefnKind_TyconILAssemblyCode
               Range = noRange
               Properties = p []
               FsAstNode = kind
               Childs = [] }
-        | TyconDelegate (typ, valinfo) ->
+        | SynTypeDefnKind.Delegate (typ, valinfo) ->
             { Type = SynTypeDefnKind_TyconDelegate
               Range = noRange
               Properties = p []
@@ -1501,7 +1501,7 @@ module private Ast =
 
     and visitSynUnionCase (uc: SynUnionCase) : Node =
         match uc with
-        | UnionCase (attrs, ident, uct, _, access, range) ->
+        | SynUnionCase (attrs, ident, uct, _, access, range) ->
             { Type = UnionCase_
               Range = r range
               Properties =
@@ -1513,15 +1513,15 @@ module private Ast =
                   [ yield visitSynUnionCaseType uct
                     yield! (visitSynAttributeLists range attrs) ] }
 
-    and visitSynUnionCaseType (uct: SynUnionCaseType) =
+    and visitSynUnionCaseType (uct: SynUnionCaseKind) =
         match uct with
-        | UnionCaseFields (cases) ->
+        | SynUnionCaseKind.Fields (cases) ->
             { Type = UnionCaseFields_
               Range = noRange
               Properties = p []
               FsAstNode = uct
               Childs = [ yield! cases |> List.map visitSynField ] }
-        | UnionCaseFullType (stype, valInfo) ->
+        | SynUnionCaseKind.FullType (stype, valInfo) ->
             { Type = UnionCaseFullType_
               Range = noRange
               Properties = p []
@@ -1532,7 +1532,7 @@ module private Ast =
 
     and visitSynEnumCase (sec: SynEnumCase) : Node =
         match sec with
-        | EnumCase (attrs, ident, _, _, range) ->
+        | SynEnumCase (attrs, ident, _, _, range) ->
             { Type = EnumCase_
               Range = r range
               Properties = p []
@@ -1543,7 +1543,7 @@ module private Ast =
 
     and visitSynField (sfield: SynField) : Node =
         match sfield with
-        | Field (attrs, isStatic, ident, typ, _, _, access, range) ->
+        | SynField (attrs, isStatic, ident, typ, _, _, access, range) ->
             let parentRange =
                 Option.map (fun (i: Ident) -> i.idRange) ident
                 |> Option.defaultValue range
@@ -1756,18 +1756,18 @@ module private Ast =
 
     and visitSynBindingKind (kind: SynBindingKind) =
         match kind with
-        | SynBindingKind.DoBinding -> "Do Binding"
+        | SynBindingKind.Do -> "Do Binding"
         | SynBindingKind.StandaloneExpression -> "Standalone Expression"
-        | SynBindingKind.NormalBinding -> "Normal Binding"
+        | SynBindingKind.Normal -> "Normal Binding"
 
-    and visitMemberKind (mk: MemberKind) =
+    and visitMemberKind (mk: SynMemberKind) =
         match mk with
-        | MemberKind.ClassConstructor -> "ClassConstructor"
-        | MemberKind.Constructor -> "Constructor"
-        | MemberKind.Member -> "Member"
-        | MemberKind.PropertyGet -> "PropertyGet"
-        | MemberKind.PropertySet -> "PropertySet"
-        | MemberKind.PropertyGetSet -> "PropertyGetSet"
+        | SynMemberKind.ClassConstructor -> "ClassConstructor"
+        | SynMemberKind.Constructor -> "Constructor"
+        | SynMemberKind.Member -> "Member"
+        | SynMemberKind.PropertyGet -> "PropertyGet"
+        | SynMemberKind.PropertySet -> "PropertySet"
+        | SynMemberKind.PropertyGetSet -> "PropertyGetSet"
 
     and visitParsedHashDirective (hash: ParsedHashDirective) : Node =
         match hash with
@@ -1827,7 +1827,7 @@ module private Ast =
               Childs =
                   [ yield visitSynComponentInfo sci
                     yield! (decls |> List.map visitSynModuleSigDecl) ] }
-        | SynModuleSigDecl.Val (SynValSig.ValSpfn _ as node, _) -> visitSynValSig node
+        | SynModuleSigDecl.Val (SynValSig.SynValSig _ as node, _) -> visitSynValSig node
         | SynModuleSigDecl.Types (typeDefs, range) ->
             { Type = SynModuleSigDecl_Types
               Range = r range

@@ -1,10 +1,10 @@
 module Fantomas.Context
 
 open System
+open FSharp.Compiler.Syntax
 open FSharp.Compiler.Text
 open FSharp.Compiler.Text.Range
-open FSharp.Compiler.Text.Pos
-open FSharp.Compiler.SyntaxTree
+open FSharp.Compiler.Text.Position
 open Fantomas
 open Fantomas.FormatConfig
 open Fantomas.TriviaTypes
