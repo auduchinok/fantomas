@@ -1,4 +1,4 @@
-FSharp.Compiler.Service
+JetBrains.FSharp.Compiler.Service
 FsUnit
 FsCheck
 Microsoft.NET.Test.Sdk
